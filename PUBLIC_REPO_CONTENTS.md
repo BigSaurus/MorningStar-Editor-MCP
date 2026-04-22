@@ -12,7 +12,7 @@ Top-level files:
 - `LICENSE`
 - `pyproject.toml`
 - `requirements.txt`
-- `README_MORNINGSTAR_MC8.md`
+- `README.md`
 - `MCP_SHARING_GUIDE.md`
 - `PUBLISHING_CHECKLIST.md`
 - `MC8_MCP_TOOL_REFERENCE.md`
@@ -59,7 +59,7 @@ If you want the smallest safe public repo, publish exactly this set:
 LICENSE
 pyproject.toml
 requirements.txt
-README_MORNINGSTAR_MC8.md
+README.md
 MCP_SHARING_GUIDE.md
 PUBLISHING_CHECKLIST.md
 MC8_MCP_TOOL_REFERENCE.md

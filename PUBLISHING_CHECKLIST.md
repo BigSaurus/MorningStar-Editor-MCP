@@ -5,7 +5,7 @@ Use this checklist when turning the `MC8 Pro` folder into its own public reposit
 ## Repo shape
 
 - Make this folder the repository root.
-- Keep `pyproject.toml`, `morningstar_mc8_mcp.py`, and `README_MORNINGSTAR_MC8.md` at the top level.
+- Keep `pyproject.toml`, `morningstar_mc8_mcp.py`, and `README.md` at the top level.
 - Keep `tools/generate_mc8_mcp_tool_reference.py` in the repo so the tool reference can be regenerated and checked.
 - Use `PUBLIC_REPO_CONTENTS.md` as the allowlist for what belongs in the public repo.
 - Use `tools/export_public_repo.ps1` to stage a clean standalone repo instead of copying the whole working folder by hand.

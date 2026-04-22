@@ -38,7 +38,7 @@ Minimum files to carry into the standalone repo:
 - `morningstar_mc8_mcp.py`
 - `pyproject.toml`
 - `requirements.txt`
-- `README_MORNINGSTAR_MC8.md`
+- `README.md`
 - `MC8_MCP_TOOL_REFERENCE.md`
 - `MCP_SHARING_GUIDE.md`
 - `tools/generate_mc8_mcp_tool_reference.py`

@@ -6,18 +6,19 @@ This file is generated from `morningstar_mc8_mcp.py`. It documents the regular M
 
 - Runtime model: regular MCP server over stdio
 - Primary server file: `morningstar_mc8_mcp.py`
-- Tool count: 25
+- Tool count: 33
 - Validated Windows ports in this workspace: output `Morningstar MC8 Pro 3`, input `Morningstar MC8 Pro 2`
 
 ## Categories
 
 - Discovery and Protocol: 2 tools
 - Read Probes: 6 tools
+- Controller Settings: 6 tools
 - Name and UI Writes: 5 tools
 - Navigation: 3 tools
 - Preset Message Programming: 5 tools
 - Bank Programming: 1 tools
-- Offline Backup JSON: 3 tools
+- Offline Backup JSON: 5 tools
 
 ## Safety Levels
 
@@ -348,6 +349,219 @@ probe_get_toggle_states(output_port: str = '', input_port: str = '', timeout_ms:
 
 ```python
 probe_get_toggle_states(output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
+```
+
+## Controller Settings
+
+### `probe_get_controller_settings_all`
+
+Request the controller-settings-all container through the editor-backed request function opcode.
+
+- Safety: `experimental`
+- Verification: `source-backed`
+- Transport: `request-response`
+- Returns: Returns the raw controller-settings-all response using the editor-backed request opcode.
+
+**Signature**
+
+```python
+probe_get_controller_settings_all(output_port: str = '', input_port: str = '', timeout_ms: int = 600, txn_id: int = 7) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `timeout_ms` | `int` | no | `600` |
+| `txn_id` | `int` | no | `7` |
+
+**Notes**
+
+- The response payload shape is not decoded yet.
+
+**Example**
+
+```python
+probe_get_controller_settings_all(output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
+```
+
+### `probe_get_controller_omniport_data`
+
+Request the Omniport controller-settings section through the editor-backed request function opcode.
+
+- Safety: `experimental`
+- Verification: `source-backed`
+- Transport: `request-response`
+- Returns: Returns the raw Omniport controller-settings response using the editor-backed request opcode.
+
+**Signature**
+
+```python
+probe_get_controller_omniport_data(output_port: str = '', input_port: str = '', timeout_ms: int = 600, txn_id: int = 8) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `timeout_ms` | `int` | no | `600` |
+| `txn_id` | `int` | no | `8` |
+
+**Notes**
+
+- The response payload shape is not decoded yet.
+
+**Example**
+
+```python
+probe_get_controller_omniport_data(output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
+```
+
+### `set_controller_omniport_data_raw`
+
+Write a raw Omniport controller-settings payload through the editor-backed save opcode.
+
+- Safety: `experimental`
+- Verification: `source-backed`
+- Transport: `request-response`
+- Returns: Writes a raw Omniport controller-settings payload using the editor-backed save opcode.
+
+**Signature**
+
+```python
+set_controller_omniport_data_raw(payload_json: str, output_port: str = '', input_port: str = '', timeout_ms: int = 600, txn_id: int = 43) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `payload_json` | `str` | yes | `` |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `timeout_ms` | `int` | no | `600` |
+| `txn_id` | `int` | no | `43` |
+
+**Notes**
+
+- payload_json must decode to a JSON array of 7-bit integers.
+- This exposes transport only; the payload schema remains inferred.
+
+**Example**
+
+```python
+set_controller_omniport_data_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
+```
+
+### `set_controller_event_processor_raw`
+
+Write a raw event-processor payload through the editor-backed save opcode.
+
+- Safety: `experimental`
+- Verification: `source-backed`
+- Transport: `request-response`
+- Returns: Writes a raw event-processor payload using the editor-backed save opcode.
+
+**Signature**
+
+```python
+set_controller_event_processor_raw(payload_json: str, output_port: str = '', input_port: str = '', timeout_ms: int = 600, txn_id: int = 44) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `payload_json` | `str` | yes | `` |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `timeout_ms` | `int` | no | `600` |
+| `txn_id` | `int` | no | `44` |
+
+**Notes**
+
+- payload_json must decode to a JSON array of 7-bit integers.
+- The editor sends this path as sendSysex4(4,10,0,0,payload).
+
+**Example**
+
+```python
+set_controller_event_processor_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
+```
+
+### `set_controller_resistor_ladder_aux_raw`
+
+Write a raw resistor-ladder aux payload through the editor-backed save opcode.
+
+- Safety: `experimental`
+- Verification: `source-backed`
+- Transport: `request-response`
+- Returns: Writes a raw resistor-ladder aux payload using the editor-backed save opcode.
+
+**Signature**
+
+```python
+set_controller_resistor_ladder_aux_raw(payload_json: str, output_port: str = '', input_port: str = '', timeout_ms: int = 600, txn_id: int = 45) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `payload_json` | `str` | yes | `` |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `timeout_ms` | `int` | no | `600` |
+| `txn_id` | `int` | no | `45` |
+
+**Notes**
+
+- payload_json must decode to a JSON array of 7-bit integers.
+- This is the most direct live transport slice for AUX 1-4 once the payload layout is captured.
+
+**Example**
+
+```python
+set_controller_resistor_ladder_aux_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
+```
+
+### `set_controller_midi_clock_slots_raw`
+
+Write a raw MIDI clock slots payload through the editor-backed save opcode.
+
+- Safety: `experimental`
+- Verification: `source-backed`
+- Transport: `request-response`
+- Returns: Writes a raw MIDI clock slots payload using the editor-backed save opcode.
+
+**Signature**
+
+```python
+set_controller_midi_clock_slots_raw(payload_json: str, output_port: str = '', input_port: str = '', timeout_ms: int = 600, txn_id: int = 46) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `payload_json` | `str` | yes | `` |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `timeout_ms` | `int` | no | `600` |
+| `txn_id` | `int` | no | `46` |
+
+**Notes**
+
+- payload_json must decode to a JSON array of 7-bit integers.
+
+**Example**
+
+```python
+set_controller_midi_clock_slots_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')
 ```
 
 ## Name and UI Writes
@@ -957,6 +1171,79 @@ build_all_banks_backup_json(banks_json: str, controller_data_json: str = '{}', p
 
 ```python
 build_all_banks_backup_json(banks_json='[]', controller_data_json='{}', pretty=True)
+```
+
+### `build_aux_controller_data_json`
+
+Build a draft controllerData payload for aux switch mappings.
+
+- Safety: `offline-json`
+- Verification: `source-backed`
+- Transport: `local-only`
+- Returns: Builds a draft controllerData payload for controller-side aux mappings inferred from the editor backup path.
+
+**Signature**
+
+```python
+build_aux_controller_data_json(aux_config_json: str, pretty: bool = True) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `aux_config_json` | `str` | yes | `` |
+| `pretty` | `bool` | no | `True` |
+
+**Notes**
+
+- Does not talk to the controller.
+- Entries using aux_switch are modeled as Omniport 1 resistor-ladder aux switches.
+- TRS aux can also be modeled with omniport plus slot (tip, ring, tip+ring).
+- The returned JSON is a draft reconstruction for backup generation, not a proven live restore payload.
+
+**Example**
+
+```python
+build_aux_controller_data_json(aux_config_json='[{"topology":"resistor_ladder_aux","aux_switch":1,"kind":"fixed_function","function":"bank_down"}]', pretty=True)
+```
+
+### `build_trs_aux_fixed_functions_controller_data_json`
+
+Build a draft controllerData payload for one Omniport configured as a TRS aux switch with fixed functions.
+
+- Safety: `offline-json`
+- Verification: `source-backed`
+- Transport: `local-only`
+- Returns: Builds a draft controllerData payload for one Omniport configured as a TRS aux switch with fixed-function assignments on tip, ring, and/or tip+ring.
+
+**Signature**
+
+```python
+build_trs_aux_fixed_functions_controller_data_json(omniport: int, tip_function: str = '', ring_function: str = '', tip_ring_function: str = '', pretty: bool = True) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `omniport` | `int` | yes | `` |
+| `tip_function` | `str` | no | `''` |
+| `ring_function` | `str` | no | `''` |
+| `tip_ring_function` | `str` | no | `''` |
+| `pretty` | `bool` | no | `True` |
+
+**Notes**
+
+- Does not talk to the controller.
+- This is a typed wrapper over the generic aux controller-data builder.
+- Useful for common bank-up and bank-down aux switch setups on Omniport 1.
+- The returned JSON is a draft reconstruction for backup generation, not a proven live restore payload.
+
+**Example**
+
+```python
+build_trs_aux_fixed_functions_controller_data_json(omniport=1, tip_function='bank_down', ring_function='bank_up', tip_ring_function='toggle_page', pretty=True)
 ```
 
 ### `inspect_backup_json`

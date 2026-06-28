@@ -40,6 +40,17 @@ MC8_PRO_TOGGLE_NAME_SIZE = 32
 MC8_PRO_LONG_NAME_SIZE = 32
 MC8_PRO_BANK_NAME_SIZE = 32
 MC8_PRO_LCD_MESSAGE_SIZE = 20
+MC8_PRO_OMNIPORT_COUNT = 4
+MC8_PRO_EXP_PRESET_COUNT = 2
+MC8_PRO_PRESET_MESSAGE_COUNT = 32
+MC8_PRO_RESISTOR_LADDER_AUX_SWITCH_COUNT = 16
+REQUEST_CONTROLLER_SETTINGS_ALL = 35
+REQUEST_OMNIPORT_DATA = 42
+CONTROLLER_SETTINGS_WRITE_OPCODE_2 = 0x04
+WRITE_CONTROLLER_OMNIPORT_DATA = 0x08
+WRITE_CONTROLLER_EVENT_PROCESSOR_DATA = 0x0A
+WRITE_RESISTOR_LADDER_AUX_SWITCH_DATA = 0x0B
+WRITE_MIDI_CLOCK_SLOTS_DATA = 0x0C
 
 ACTION_TYPE_PRESS = 0x01
 TOGGLE_TYPE_POS_1 = 0x00
@@ -48,9 +59,47 @@ MESSAGE_TYPE_CC = 0x02
 CONTROLLER_FUNCTION_BANK_UP = 0x00
 CONTROLLER_FUNCTION_BANK_DOWN = 0x01
 CONTROLLER_FUNCTION_TOGGLE_PAGE = 0x04
+EDITOR_UPLOAD_OPCODE_2 = 0x07
+EDITOR_UPLOAD_START_OPCODE_4 = 0x30
+EDITOR_UPLOAD_START_ALL_OPCODE_4 = 0x31
+EDITOR_UPLOAD_FINALIZE_OPCODE_4 = 0x31
+EDITOR_UPLOAD_REQUEST_BACKUP_OPCODE_4 = 0x32
+EDITOR_UPLOAD_BANK_OPCODE_3 = 0x10
+EDITOR_UPLOAD_PRESET_OPCODE_3 = 0x11
+EDITOR_UPLOAD_EXP_PRESET_OPCODE_3 = 0x12
+EDITOR_UPLOAD_ALL_BANK_OPCODE_3 = 0x13
+EDITOR_UPLOAD_ALL_PRESET_OPCODE_3 = 0x14
+EDITOR_UPLOAD_ALL_EXP_PRESET_OPCODE_3 = 0x15
+EDITOR_UPLOAD_STATUS_FAILED = 0x03
+EDITOR_UPLOAD_STATUS_CONTROLLER_BACKUP_FAILED = 0x10
+EDITOR_UPLOAD_STATUS_COMPLETED = 0x11
+EDITOR_UPLOAD_STATUS_REQUEST_NEXT = 0x21
 MAX_RAW_MESSAGE_PAYLOAD_SIZE = 64
 MESSAGE_JSON_DATA_FIELD_COUNT = 18
 MC8_PRO_PRESET_COUNT = 16
+MC8_PRO_EDITOR_UPLOAD_PRESET_COUNT = 32
+MC8_PRO_EDITOR_UPLOAD_EXP_PRESET_COUNT = 4
+DRAFT_CONTROLLER_DATA_VERSION = "draft-inferred-v2"
+
+SUPPORTED_AUX_TOPOLOGIES = {
+    "resistor_ladder_aux",
+    "trs_aux",
+}
+
+SUPPORTED_TRS_AUX_SLOTS = {
+    "tip": "tip",
+    "ring": "ring",
+    "tip+ring": "tip_ring",
+    "tip_ring": "tip_ring",
+    "tip-ring": "tip_ring",
+}
+
+SUPPORTED_AUX_FIXED_FUNCTIONS = {
+    "bank_up",
+    "bank_down",
+    "toggle_page",
+    "midi_clock_tap",
+}
 
 READ_ONLY_CAPABILITIES: dict[str, Any] = {
     "summary": {
@@ -79,6 +128,7 @@ READ_ONLY_CAPABILITIES: dict[str, Any] = {
 TOOL_REFERENCE_GROUP_ORDER = [
     "Discovery and Protocol",
     "Read Probes",
+    "Controller Settings",
     "Name and UI Writes",
     "Navigation",
     "Preset Message Programming",
@@ -169,6 +219,75 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         "returns": "Returns toggle-state bytes for the current bank plus a decoded per-preset view.",
         "notes": [],
         "example": "probe_get_toggle_states(output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
+    },
+    "probe_get_controller_settings_all": {
+        "group": "Controller Settings",
+        "safety": "experimental",
+        "verification": "source-backed",
+        "transport": "request-response",
+        "returns": "Returns the raw controller-settings-all response using the editor-backed request opcode.",
+        "notes": [
+            "The response payload shape is not decoded yet.",
+        ],
+        "example": "probe_get_controller_settings_all(output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
+    },
+    "probe_get_controller_omniport_data": {
+        "group": "Controller Settings",
+        "safety": "experimental",
+        "verification": "source-backed",
+        "transport": "request-response",
+        "returns": "Returns the raw Omniport controller-settings response using the editor-backed request opcode.",
+        "notes": [
+            "The response payload shape is not decoded yet.",
+        ],
+        "example": "probe_get_controller_omniport_data(output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
+    },
+    "set_controller_omniport_data_raw": {
+        "group": "Controller Settings",
+        "safety": "experimental",
+        "verification": "source-backed",
+        "transport": "request-response",
+        "returns": "Writes a raw Omniport controller-settings payload using the editor-backed save opcode.",
+        "notes": [
+            "payload_json must decode to a JSON array of 7-bit integers.",
+            "This exposes transport only; the payload schema remains inferred.",
+        ],
+        "example": "set_controller_omniport_data_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
+    },
+    "set_controller_event_processor_raw": {
+        "group": "Controller Settings",
+        "safety": "experimental",
+        "verification": "source-backed",
+        "transport": "request-response",
+        "returns": "Writes a raw event-processor payload using the editor-backed save opcode.",
+        "notes": [
+            "payload_json must decode to a JSON array of 7-bit integers.",
+            "The editor sends this path as sendSysex4(4,10,0,0,payload).",
+        ],
+        "example": "set_controller_event_processor_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
+    },
+    "set_controller_resistor_ladder_aux_raw": {
+        "group": "Controller Settings",
+        "safety": "experimental",
+        "verification": "source-backed",
+        "transport": "request-response",
+        "returns": "Writes a raw resistor-ladder aux payload using the editor-backed save opcode.",
+        "notes": [
+            "payload_json must decode to a JSON array of 7-bit integers.",
+            "This is the most direct live transport slice for AUX 1-4 once the payload layout is captured.",
+        ],
+        "example": "set_controller_resistor_ladder_aux_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
+    },
+    "set_controller_midi_clock_slots_raw": {
+        "group": "Controller Settings",
+        "safety": "experimental",
+        "verification": "source-backed",
+        "transport": "request-response",
+        "returns": "Writes a raw MIDI clock slots payload using the editor-backed save opcode.",
+        "notes": [
+            "payload_json must decode to a JSON array of 7-bit integers.",
+        ],
+        "example": "set_controller_midi_clock_slots_raw(payload_json='[]', output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
     },
     "set_current_bank_name": {
         "group": "Name and UI Writes",
@@ -354,6 +473,34 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         ],
         "example": "build_all_banks_backup_json(banks_json='[]', controller_data_json='{}', pretty=True)",
     },
+    "build_aux_controller_data_json": {
+        "group": "Offline Backup JSON",
+        "safety": "offline-json",
+        "verification": "source-backed",
+        "transport": "local-only",
+        "returns": "Builds a draft controllerData payload for controller-side aux mappings inferred from the editor backup path.",
+        "notes": [
+            "Does not talk to the controller.",
+            "Entries using aux_switch are modeled as Omniport 1 resistor-ladder aux switches.",
+            "TRS aux can also be modeled with omniport plus slot (tip, ring, tip+ring).",
+            "The returned JSON is a draft reconstruction for backup generation, not a proven live restore payload.",
+        ],
+        "example": "build_aux_controller_data_json(aux_config_json='[{\"topology\":\"resistor_ladder_aux\",\"aux_switch\":1,\"kind\":\"fixed_function\",\"function\":\"bank_down\"}]', pretty=True)",
+    },
+    "build_trs_aux_fixed_functions_controller_data_json": {
+        "group": "Offline Backup JSON",
+        "safety": "offline-json",
+        "verification": "source-backed",
+        "transport": "local-only",
+        "returns": "Builds a draft controllerData payload for one Omniport configured as a TRS aux switch with fixed-function assignments on tip, ring, and/or tip+ring.",
+        "notes": [
+            "Does not talk to the controller.",
+            "This is a typed wrapper over the generic aux controller-data builder.",
+            "Useful for common bank-up and bank-down aux switch setups on Omniport 1.",
+            "The returned JSON is a draft reconstruction for backup generation, not a proven live restore payload.",
+        ],
+        "example": "build_trs_aux_fixed_functions_controller_data_json(omniport=1, tip_function='bank_down', ring_function='bank_up', tip_ring_function='toggle_page', pretty=True)",
+    },
     "inspect_backup_json": {
         "group": "Offline Backup JSON",
         "safety": "offline-json",
@@ -470,6 +617,39 @@ def _build_request(
     return frame
 
 
+def _build_editor_sysex(
+    function_1: int,
+    function_2: int = 0,
+    function_3: int = 0,
+    function_4: int = 0,
+    function_5: int = 0,
+    function_6: int = 0,
+    payload: list[int] | None = None,
+    model_id: int = MC8_PRO_MODEL_ID,
+) -> list[int]:
+    frame = [
+        0xF0,
+        *MORNINGSTAR_MANUFACTURER_ID,
+        model_id,
+        0x00,
+        function_1 & 0x7F,
+        function_2 & 0x7F,
+        function_3 & 0x7F,
+        function_4 & 0x7F,
+        function_5 & 0x7F,
+        function_6 & 0x7F,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+    ]
+    if payload:
+        frame.extend(value & 0x7F for value in payload)
+    frame.extend([0x00, 0xF7])
+    frame[-2] = _checksum(frame)
+    return frame
+
+
 def _is_morningstar_sysex(values: list[int]) -> bool:
     return (
         len(values) >= 18
@@ -477,6 +657,15 @@ def _is_morningstar_sysex(values: list[int]) -> bool:
         and values[-1] == 0xF7
         and values[1:4] == MORNINGSTAR_MANUFACTURER_ID
         and values[6] == MORNINGSTAR_OPCODE_1
+    )
+
+
+def _is_morningstar_editor_sysex(values: list[int]) -> bool:
+    return (
+        len(values) >= 18
+        and values[0] == 0xF0
+        and values[-1] == 0xF7
+        and values[1:4] == MORNINGSTAR_MANUFACTURER_ID
     )
 
 
@@ -515,6 +704,27 @@ def _parse_response(values: list[int]) -> dict[str, Any]:
         parsed["type"] = "response"
 
     return parsed
+
+
+def _parse_editor_sysex(values: list[int]) -> dict[str, Any]:
+    if not _is_morningstar_editor_sysex(values):
+        raise ValueError("Not a Morningstar editor-style SysEx frame")
+
+    return {
+        "hex": _bytes_to_hex(values),
+        "model_id": values[4],
+        "function_1": values[6],
+        "function_2": values[7],
+        "function_3": values[8],
+        "function_4": values[9],
+        "function_5": values[10],
+        "function_6": values[11],
+        "function_7": values[12],
+        "function_8": values[13],
+        "payload": values[16:-2],
+        "checksum": values[-2],
+        "checksum_valid": _validate_checksum(values),
+    }
 
 
 def _collect_matching_response(
@@ -650,9 +860,21 @@ def _validate_raw_payload(payload: list[int]) -> list[int]:
 
 
 def _preset_label_from_number(preset_number: int) -> str:
-    if preset_number < 0 or preset_number >= MC8_PRO_PRESET_COUNT:
-        raise ValueError(f"preset_number must be in 0..{MC8_PRO_PRESET_COUNT - 1}")
+    if preset_number < 0:
+        raise ValueError("preset_number must be non-negative")
+    if preset_number >= MC8_PRO_PRESET_COUNT:
+        return f"slot_{preset_number}"
     return chr(ord("A") + preset_number)
+
+
+def _editor_preset_label_from_number(preset_number: int) -> str:
+    if preset_number < 0:
+        raise ValueError("preset_number must be non-negative")
+    if preset_number >= MC8_PRO_EDITOR_UPLOAD_PRESET_COUNT:
+        return f"slot_{preset_number}"
+    page_size = 8
+    page_number, slot_number = divmod(preset_number, page_size)
+    return f"{chr(ord('A') + slot_number)}{page_number + 1}"
 
 
 def _preset_number_from_label(preset: str) -> int:
@@ -808,6 +1030,38 @@ def _send_write_without_response(
     }
 
 
+def _send_function_without_response(
+    op2: int,
+    op3: int = 0,
+    op4: int = 0,
+    op5: int = 0,
+    op6: int = 0,
+    op7: int = 0,
+    output_port: str = "",
+    txn_id: int = 0,
+) -> dict[str, Any]:
+    request = _build_request(
+        op2=op2,
+        op3=op3,
+        op4=op4,
+        op5=op5,
+        op6=op6,
+        op7=op7,
+        txn_id=txn_id,
+    )
+    out_name = _resolve_out_port(output_port)
+    with mido.open_output(out_name) as out_port:
+        out_port.send(mido.Message("sysex", data=request[1:-1]))
+
+    return {
+        "status": "sent",
+        "out_port": out_name,
+        "request_hex": _bytes_to_hex(request),
+        "response": None,
+        "received": [],
+    }
+
+
 def _save_opcode(save: bool) -> int:
     return 0x7F if save else 0x00
 
@@ -844,7 +1098,7 @@ def _write_preset_name(
     result = _run_write(
         op2=op2,
         op3=preset_number,
-        op4=_save_opcode(save),
+        op6=_save_opcode(save),
         payload=payload,
         output_port=output_port,
         input_port=input_port,
@@ -892,6 +1146,43 @@ def _write_preset_message(
         "message_type": message_type,
         "payload": payload,
         "saved": save,
+    }
+    return result
+
+
+def _parse_raw_payload_json(payload_json: str) -> list[int]:
+    payload = _parse_json_argument(payload_json, "payload_json")
+    if not isinstance(payload, list):
+        raise ValueError("payload_json must decode to a JSON array of 7-bit integers")
+    return _validate_raw_payload([_parse_int(value, "payload value") for value in payload])
+
+
+def _write_controller_settings_section_raw(
+    payload_json: str,
+    section_name: str,
+    op3: int,
+    output_port: str,
+    input_port: str,
+    timeout_ms: int,
+    txn_id: int,
+    op4: int = 0,
+    op5: int = 0,
+) -> dict[str, Any]:
+    payload = _parse_raw_payload_json(payload_json)
+    result = _run_write(
+        op2=CONTROLLER_SETTINGS_WRITE_OPCODE_2,
+        op3=op3,
+        op4=op4,
+        op5=op5,
+        payload=payload,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
+    result["decoded"] = {
+        "section": section_name,
+        "payload": payload,
     }
     return result
 
@@ -1168,7 +1459,7 @@ def _normalize_backup_bank_spec(raw_bank: dict[str, Any]) -> dict[str, Any]:
                 messages.append(normalized)
 
         presets_by_number[preset_number] = {
-            "preset": _preset_label_from_number(preset_number),
+            "preset": _editor_preset_label_from_number(preset_number),
             "preset_number": preset_number,
             "short_name": str(preset.get("shortName") or ""),
             "toggle_name": str(preset.get("toggleName") or ""),
@@ -1241,40 +1532,6 @@ def _program_current_bank_from_spec(
 
     for preset_spec in bank_spec["presets"]:
         preset = preset_spec["preset"]
-        short_name = preset_spec.get("short_name", "")
-        toggle_name = preset_spec.get("toggle_name", "")
-        long_name = preset_spec.get("long_name", "")
-        if short_name:
-            writes.append(
-                set_preset_short_name(
-                    preset=preset,
-                    short_name=short_name,
-                    save=save,
-                    output_port=output_port,
-                    input_port=input_port,
-                )
-            )
-        if toggle_name:
-            writes.append(
-                set_preset_toggle_name(
-                    preset=preset,
-                    toggle_name=toggle_name,
-                    save=save,
-                    output_port=output_port,
-                    input_port=input_port,
-                )
-            )
-        if long_name:
-            writes.append(
-                set_preset_long_name(
-                    preset=preset,
-                    long_name=long_name,
-                    save=save,
-                    output_port=output_port,
-                    input_port=input_port,
-                )
-            )
-
         for message_spec in preset_spec["messages"]:
             kind = message_spec["kind"]
             if kind == "pc":
@@ -1335,8 +1592,42 @@ def _program_current_bank_from_spec(
                         input_port=input_port,
                     )
                 )
+        short_name = preset_spec.get("short_name", "")
+        toggle_name = preset_spec.get("toggle_name", "")
+        long_name = preset_spec.get("long_name", "")
+        if short_name:
+            writes.append(
+                set_preset_short_name(
+                    preset=preset,
+                    short_name=short_name,
+                    save=save,
+                    output_port=output_port,
+                    input_port=input_port,
+                )
+            )
+        if toggle_name:
+            writes.append(
+                set_preset_toggle_name(
+                    preset=preset,
+                    toggle_name=toggle_name,
+                    save=save,
+                    output_port=output_port,
+                    input_port=input_port,
+                )
+            )
+        if long_name:
+            writes.append(
+                set_preset_long_name(
+                    preset=preset,
+                    long_name=long_name,
+                    save=save,
+                    output_port=output_port,
+                    input_port=input_port,
+                )
+            )
 
     return writes
+
 
 
 def _build_backup_message_json(message_number: int, message_spec: dict[str, Any]) -> dict[str, Any]:
@@ -1466,11 +1757,11 @@ def _build_current_bank_backup_data(
 ) -> dict[str, Any]:
     preset_lookup = {preset["preset_number"]: preset for preset in bank_spec["presets"]}
     preset_array = []
-    for preset_number in range(MC8_PRO_PRESET_COUNT):
+    for preset_number in range(MC8_PRO_EDITOR_UPLOAD_PRESET_COUNT):
         preset_spec = preset_lookup.get(
             preset_number,
             {
-                "preset": _preset_label_from_number(preset_number),
+                "preset": _editor_preset_label_from_number(preset_number),
                 "preset_number": preset_number,
                 "short_name": "",
                 "toggle_name": "",
@@ -1515,6 +1806,737 @@ def _build_current_bank_backup_data(
                 },
             },
         }
+    }
+
+
+def _editor_default_preset_spec(preset_number: int) -> dict[str, Any]:
+    preset_label = _editor_preset_label_from_number(preset_number)
+    return {
+        "preset": preset_label,
+        "preset_number": preset_number,
+        "short_name": "",
+        "toggle_name": "",
+        "long_name": "",
+        "shift_name": "",
+        "messages": [],
+        "to_toggle": 0,
+        "to_blink": 0,
+        "to_msg_scroll": 0,
+        "toggle_group": 0,
+        "name_color": 0,
+        "toggle_name_color": 0,
+        "shift_name_color": 0,
+        "background_color": 0,
+        "toggle_background_color": 0,
+        "shift_background_color": 0,
+        "led_color": 0,
+        "toggle_led_color": 0,
+        "shift_led_color": 0,
+    }
+
+
+def _editor_blank_name_payload(size: int) -> list[int]:
+    return _encode_ascii_payload("", size=size, label="editor_name")
+
+
+def _editor_empty_message_bytes(message_number: int) -> list[int]:
+    return [
+        message_number,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]
+
+
+def _editor_message_bytes_for_kind(message_number: int, message_spec: dict[str, Any]) -> list[int]:
+    kind = message_spec["kind"]
+    if kind == "pc":
+        data_fields = [message_spec["program"], 0, 0] + [0] * 15
+        return [
+            message_number,
+            MESSAGE_TYPE_PC,
+            *data_fields[:3],
+            message_spec["midi_channel"],
+            message_spec["action_type"],
+            message_spec["toggle_type"],
+            *data_fields[3:],
+        ]
+
+    if kind == "cc":
+        data_fields = [message_spec["cc_number"], message_spec["cc_value"], 0] + [0] * 15
+        return [
+            message_number,
+            MESSAGE_TYPE_CC,
+            *data_fields[:3],
+            message_spec["midi_channel"],
+            message_spec["action_type"],
+            message_spec["toggle_type"],
+            *data_fields[3:],
+        ]
+
+    raise ValueError(f"Editor upload does not support message kind '{kind}'")
+
+
+def _editor_message_slot_map(preset_spec: dict[str, Any]) -> dict[int, list[int]]:
+    slot_map: dict[int, list[int]] = {}
+    for message_spec in preset_spec["messages"]:
+        kind = message_spec["kind"]
+        if kind in {"pc", "cc"}:
+            slot_map[message_spec["message_slot"]] = _editor_message_bytes_for_kind(
+                message_spec["message_slot"],
+                message_spec,
+            )
+            continue
+
+        if kind == "bank_select_pc":
+            slot_number = message_spec["start_message_slot"]
+            slot_map[slot_number] = _editor_message_bytes_for_kind(
+                slot_number,
+                {
+                    "kind": "cc",
+                    "cc_number": 0,
+                    "cc_value": message_spec["bank_msb"],
+                    "midi_channel": message_spec["midi_channel"],
+                    "action_type": message_spec["action_type"],
+                    "toggle_type": message_spec["toggle_type"],
+                },
+            )
+            slot_number += 1
+            if message_spec["include_bank_lsb"]:
+                slot_map[slot_number] = _editor_message_bytes_for_kind(
+                    slot_number,
+                    {
+                        "kind": "cc",
+                        "cc_number": 32,
+                        "cc_value": message_spec["bank_lsb"],
+                        "midi_channel": message_spec["midi_channel"],
+                        "action_type": message_spec["action_type"],
+                        "toggle_type": message_spec["toggle_type"],
+                    },
+                )
+                slot_number += 1
+            slot_map[slot_number] = _editor_message_bytes_for_kind(
+                slot_number,
+                {
+                    "kind": "pc",
+                    "program": message_spec["program"],
+                    "midi_channel": message_spec["midi_channel"],
+                    "action_type": message_spec["action_type"],
+                    "toggle_type": message_spec["toggle_type"],
+                },
+            )
+            continue
+
+        raise ValueError(f"Editor upload does not support message kind '{kind}'")
+
+    return slot_map
+
+
+def _encode_editor_preset_chunk(
+    preset_spec: dict[str, Any],
+    bank_number: int,
+    is_exp: bool = False,
+) -> list[int]:
+    payload = [
+        0x7F,
+        0x00,
+        0x03,
+        _validate_7bit_value(bank_number, "bank_number"),
+        _validate_7bit_value(preset_spec["preset_number"], "preset_number"),
+        1 if is_exp else 0,
+    ]
+    slot_map = _editor_message_slot_map(preset_spec)
+    for message_number in range(MC8_PRO_PRESET_MESSAGE_COUNT):
+        payload.extend([0x7F, 0x01, 23])
+        payload.extend(slot_map.get(message_number, _editor_empty_message_bytes(message_number)))
+
+    payload.extend([0x7F, 0x02, MC8_PRO_SHORT_NAME_SIZE])
+    payload.extend(_encode_ascii_payload(preset_spec.get("short_name", ""), MC8_PRO_SHORT_NAME_SIZE, "short_name"))
+    payload.extend([0x7F, 0x03, MC8_PRO_TOGGLE_NAME_SIZE])
+    payload.extend(_encode_ascii_payload(preset_spec.get("toggle_name", ""), MC8_PRO_TOGGLE_NAME_SIZE, "toggle_name"))
+    payload.extend([0x7F, 0x04, MC8_PRO_LONG_NAME_SIZE])
+    payload.extend(_encode_ascii_payload(preset_spec.get("long_name", ""), MC8_PRO_LONG_NAME_SIZE, "long_name"))
+    payload.extend(
+        [
+            0x7F,
+            0x05,
+            32,
+            preset_spec.get("to_toggle", 0),
+            preset_spec.get("to_blink", 0),
+            preset_spec.get("to_msg_scroll", 0),
+            preset_spec.get("toggle_group", 0),
+            preset_spec.get("led_color", 0),
+            preset_spec.get("toggle_led_color", 0),
+            preset_spec.get("shift_led_color", 0),
+            preset_spec.get("background_color", 0),
+            preset_spec.get("name_color", 0),
+            preset_spec.get("toggle_name_color", 0),
+            preset_spec.get("shift_name_color", 0),
+            preset_spec.get("toggle_background_color", 0),
+            preset_spec.get("shift_background_color", 0),
+        ]
+    )
+    payload.extend([0] * 19)
+    payload.extend([0x7F, 0x06, MC8_PRO_SHORT_NAME_SIZE])
+    payload.extend(
+        _encode_ascii_payload(
+            preset_spec.get("shift_name", ""),
+            MC8_PRO_SHORT_NAME_SIZE,
+            "shift_name",
+        )
+    )
+    return payload
+
+
+def _encode_editor_bank_chunk(bank_name: str, bank_number: int) -> list[int]:
+    payload = [0x7F, 0x00, 0x01, _validate_7bit_value(bank_number, "bank_number")]
+    payload.extend([0x7F, 0x01, 8, 0, 0, 0, 0, 1, 0, 0, 0])
+    for message_number in range(MC8_PRO_PRESET_MESSAGE_COUNT):
+        payload.extend([0x7F, 0x02, 14])
+        payload.extend(
+            [
+                message_number,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                2,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+            ]
+        )
+    payload.extend([0x7F, 0x03, MC8_PRO_BANK_NAME_SIZE])
+    payload.extend(_encode_ascii_payload(bank_name, MC8_PRO_BANK_NAME_SIZE, "bank_name"))
+    payload.extend([0x7F, 0x04, MC8_PRO_BANK_NAME_SIZE])
+    payload.extend(_editor_blank_name_payload(MC8_PRO_BANK_NAME_SIZE))
+    return payload
+
+
+def _build_editor_current_bank_upload_chunks(
+    bank_spec: dict[str, Any],
+    bank_number: int,
+    include_expression_presets: bool,
+    include_bank_chunk: bool = True,
+) -> list[dict[str, Any]]:
+    preset_lookup = {preset["preset_number"]: preset for preset in bank_spec["presets"]}
+    chunks: list[dict[str, Any]] = []
+
+    if include_bank_chunk:
+        chunks.append(
+            {
+                "type": "bank",
+                "op3": EDITOR_UPLOAD_BANK_OPCODE_3,
+                "op4": 0,
+                "op5": 0,
+                "payload": _encode_editor_bank_chunk(bank_spec["bank_name"], bank_number),
+            }
+        )
+
+    for preset_number in range(MC8_PRO_EDITOR_UPLOAD_PRESET_COUNT):
+        if preset_number in preset_lookup:
+            preset_spec = preset_lookup[preset_number]
+        else:
+            preset_spec = _editor_default_preset_spec(preset_number)
+        chunks.append(
+            {
+                "type": "preset",
+                "op3": EDITOR_UPLOAD_PRESET_OPCODE_3,
+                "op4": preset_number,
+                "op5": 0,
+                "payload": _encode_editor_preset_chunk(preset_spec, bank_number, is_exp=False),
+            }
+        )
+
+    if include_expression_presets:
+        for preset_number in range(MC8_PRO_EDITOR_UPLOAD_EXP_PRESET_COUNT):
+            chunks.append(
+                {
+                    "type": "expPreset",
+                    "op3": EDITOR_UPLOAD_EXP_PRESET_OPCODE_3,
+                    "op4": preset_number,
+                    "op5": 0,
+                    "payload": _encode_editor_preset_chunk(
+                        _editor_default_preset_spec(preset_number),
+                        bank_number,
+                        is_exp=True,
+                    ),
+                }
+            )
+
+    return chunks
+
+
+def _extract_editor_upload_status(response: dict[str, Any]) -> int | None:
+    if response.get("function_1") == EDITOR_UPLOAD_OPCODE_2 and response.get("function_2") == 0:
+        value = response.get("function_3")
+        if value in {
+            EDITOR_UPLOAD_STATUS_FAILED,
+            EDITOR_UPLOAD_STATUS_CONTROLLER_BACKUP_FAILED,
+            EDITOR_UPLOAD_STATUS_COMPLETED,
+            EDITOR_UPLOAD_STATUS_REQUEST_NEXT,
+        }:
+            return value
+    return None
+
+
+def _normalize_editor_upload_status(status: int | None, *, sent_chunks_count: int, finalized: bool) -> int | None:
+    if status == EDITOR_UPLOAD_STATUS_FAILED and sent_chunks_count == 0 and not finalized:
+        return EDITOR_UPLOAD_STATUS_REQUEST_NEXT
+    return status
+
+
+def _send_editor_sysex_with_retry(
+    out_port: mido.ports.BaseOutput,
+    request: list[int],
+    *,
+    context: str,
+    retries: int = 3,
+    retry_delay_seconds: float = 0.05,
+    settle_delay_seconds: float = 0.02,
+) -> None:
+    last_error: Exception | None = None
+    for attempt in range(retries):
+        try:
+            out_port.send(mido.Message("sysex", data=request[1:-1]))
+            time.sleep(settle_delay_seconds)
+            return
+        except Exception as exc:  # noqa: BLE001
+            last_error = exc
+            try:
+                raw_port = getattr(out_port, "_rt", None)
+                if raw_port is not None:
+                    raw_port.send_message(request)
+                    time.sleep(settle_delay_seconds)
+                    return
+            except Exception:  # noqa: BLE001
+                pass
+            if attempt == retries - 1:
+                raise RuntimeError(f"Failed to send editor sysex for {context}: {exc}") from exc
+            time.sleep(retry_delay_seconds)
+    if last_error is not None:
+        raise RuntimeError(f"Failed to send editor sysex for {context}: {last_error}") from last_error
+
+
+def _run_editor_current_bank_upload(
+    chunks: list[dict[str, Any]],
+    output_port: str,
+    input_port: str,
+    timeout_ms: int,
+) -> dict[str, Any]:
+    if timeout_ms < 100 or timeout_ms > 60000:
+        raise ValueError("timeout_ms must be in 100..60000")
+
+    out_name = _resolve_out_port(output_port)
+    in_name = _resolve_in_port(input_port)
+    start_request = _build_editor_sysex(
+        function_1=EDITOR_UPLOAD_OPCODE_2,
+        function_2=0,
+        function_3=EDITOR_UPLOAD_START_OPCODE_4,
+        function_4=0,
+    )
+    finalize_request = _build_editor_sysex(
+        function_1=EDITOR_UPLOAD_OPCODE_2,
+        function_2=0,
+        function_3=EDITOR_UPLOAD_FINALIZE_OPCODE_4,
+        function_4=0,
+    )
+
+    remaining = [dict(chunk) for chunk in chunks]
+    sent_chunks: list[dict[str, Any]] = []
+    received: list[dict[str, Any]] = []
+    finalized = False
+    deadline = time.time() + (timeout_ms / 1000.0)
+
+    with mido.open_input(in_name) as in_port, mido.open_output(out_name) as out_port:
+        _send_editor_sysex_with_retry(out_port, start_request, context="upload start")
+
+        while time.time() < deadline:
+            for incoming in in_port.iter_pending():
+                if incoming.type != "sysex":
+                    received.append({"type": incoming.type, "repr": str(incoming)})
+                    continue
+
+                full = [0xF0, *list(incoming.data), 0xF7]
+                if not _is_morningstar_editor_sysex(full):
+                    received.append({"type": "sysex", "hex": _bytes_to_hex(full), "matched": False})
+                    continue
+
+                parsed = _parse_editor_sysex(full)
+                received.append(parsed)
+                status = _normalize_editor_upload_status(
+                    _extract_editor_upload_status(parsed),
+                    sent_chunks_count=len(sent_chunks),
+                    finalized=finalized,
+                )
+                if status is None:
+                    continue
+                if status == EDITOR_UPLOAD_STATUS_FAILED:
+                    # Some MC8 Pro sessions end the transfer with 0x03 after all
+                    # payload chunks were accepted. Treat that terminal 0x03 as a
+                    # successful completion once finalize has been sent or once all
+                    # payload chunks have already been consumed.
+                    if finalized or (not remaining and len(sent_chunks) == len(chunks)):
+                        return {
+                            "status": "completed",
+                            "out_port": out_name,
+                            "in_port": in_name,
+                            "sent_chunks": sent_chunks,
+                            "received": received,
+                            "finalize_request_hex": _bytes_to_hex(finalize_request),
+                            "start_request_hex": _bytes_to_hex(start_request),
+                            "note": "device replied 0x03 after all upload chunks were accepted",
+                        }
+                    return {
+                        "status": "device_failed",
+                        "out_port": out_name,
+                        "in_port": in_name,
+                        "sent_chunks": sent_chunks,
+                        "received": received,
+                        "finalize_request_hex": _bytes_to_hex(finalize_request),
+                        "start_request_hex": _bytes_to_hex(start_request),
+                    }
+                if status == EDITOR_UPLOAD_STATUS_CONTROLLER_BACKUP_FAILED:
+                    return {
+                        "status": "controller_backup_failed",
+                        "out_port": out_name,
+                        "in_port": in_name,
+                        "sent_chunks": sent_chunks,
+                        "received": received,
+                        "finalize_request_hex": _bytes_to_hex(finalize_request),
+                        "start_request_hex": _bytes_to_hex(start_request),
+                    }
+                if status == EDITOR_UPLOAD_STATUS_REQUEST_NEXT:
+                    if remaining:
+                        next_chunk = remaining.pop(0)
+                        request = _build_editor_sysex(
+                            function_1=EDITOR_UPLOAD_OPCODE_2,
+                            function_2=next_chunk["op3"],
+                            function_3=next_chunk["op4"],
+                            function_4=next_chunk["op5"],
+                            payload=next_chunk["payload"],
+                        )
+                        _send_editor_sysex_with_retry(
+                            out_port,
+                            request,
+                            context=f"upload chunk {len(sent_chunks) + 1}/{len(chunks)} ({next_chunk['type']})",
+                        )
+                        sent_chunks.append(
+                            {
+                                "type": next_chunk["type"],
+                                "request_hex": _bytes_to_hex(request),
+                            }
+                        )
+                    elif not finalized:
+                        _send_editor_sysex_with_retry(out_port, finalize_request, context="upload finalize")
+                        finalized = True
+                    continue
+                if status == EDITOR_UPLOAD_STATUS_COMPLETED:
+                    return {
+                        "status": "completed",
+                        "out_port": out_name,
+                        "in_port": in_name,
+                        "sent_chunks": sent_chunks,
+                        "received": received,
+                        "finalize_request_hex": _bytes_to_hex(finalize_request),
+                        "start_request_hex": _bytes_to_hex(start_request),
+                    }
+            time.sleep(0.01)
+
+    return {
+        "status": "timeout",
+        "out_port": out_name,
+        "in_port": in_name,
+        "sent_chunks": sent_chunks,
+        "received": received,
+        "finalize_request_hex": _bytes_to_hex(finalize_request),
+        "start_request_hex": _bytes_to_hex(start_request),
+    }
+
+
+def _normalize_aux_switch_spec(raw_action: dict[str, Any], index: int) -> dict[str, Any]:
+    topology_raw = str(raw_action.get("topology") or "").strip().lower()
+    aux_switch_raw = raw_action.get("aux_switch")
+    omniport_raw = raw_action.get("omniport")
+    slot_raw = raw_action.get("slot")
+
+    if not topology_raw:
+        if aux_switch_raw is not None:
+            topology_raw = "resistor_ladder_aux"
+        elif omniport_raw is not None or slot_raw is not None:
+            topology_raw = "trs_aux"
+
+    if topology_raw not in SUPPORTED_AUX_TOPOLOGIES:
+        allowed = ", ".join(sorted(SUPPORTED_AUX_TOPOLOGIES))
+        raise ValueError(f"aux topology must be one of: {allowed}")
+
+    target: dict[str, Any]
+    if topology_raw == "resistor_ladder_aux":
+        aux_switch = _parse_int(raw_action.get("aux_switch", index + 1), "aux_switch")
+        if aux_switch < 1 or aux_switch > MC8_PRO_RESISTOR_LADDER_AUX_SWITCH_COUNT:
+            raise ValueError(
+                f"aux_switch must be in 1..{MC8_PRO_RESISTOR_LADDER_AUX_SWITCH_COUNT}"
+            )
+        target = {
+            "topology": topology_raw,
+            "omniport": 1,
+            "auxSwitch": aux_switch,
+        }
+    else:
+        omniport = _parse_int(raw_action.get("omniport", 1), "omniport")
+        if omniport < 1 or omniport > MC8_PRO_OMNIPORT_COUNT:
+            raise ValueError(f"omniport must be in 1..{MC8_PRO_OMNIPORT_COUNT}")
+        slot_key = str(raw_action.get("slot") or "").strip().lower()
+        slot = SUPPORTED_TRS_AUX_SLOTS.get(slot_key)
+        if not slot:
+            allowed = ", ".join(sorted(SUPPORTED_TRS_AUX_SLOTS))
+            raise ValueError(f"slot must be one of: {allowed}")
+        target = {
+            "topology": topology_raw,
+            "omniport": omniport,
+            "slot": slot,
+        }
+
+    kind = str(raw_action.get("kind") or "").strip().lower()
+    if not kind:
+        raise ValueError("aux switch entry requires kind")
+
+    if kind == "fixed_function":
+        function_name = str(raw_action.get("function") or "").strip().lower()
+        if function_name not in SUPPORTED_AUX_FIXED_FUNCTIONS:
+            allowed = ", ".join(sorted(SUPPORTED_AUX_FIXED_FUNCTIONS))
+            raise ValueError(f"fixed_function must be one of: {allowed}")
+        return {
+            **target,
+            "kind": kind,
+            "function": function_name,
+            "label": str(raw_action.get("label") or function_name).strip(),
+        }
+
+    if kind == "cc":
+        return {
+            **target,
+            "kind": kind,
+            "label": str(raw_action.get("label") or f"CC {_parse_int(raw_action.get('cc_number', 0), 'cc_number')}").strip(),
+            "midiChannel": _validate_7bit_value(
+                _parse_int(raw_action.get("midi_channel", 0), "midi_channel"),
+                "midi_channel",
+            ),
+            "ccNumber": _validate_7bit_value(
+                _parse_int(raw_action.get("cc_number", 0), "cc_number"),
+                "cc_number",
+            ),
+            "ccValue": _validate_7bit_value(
+                _parse_int(raw_action.get("cc_value", 127), "cc_value"),
+                "cc_value",
+            ),
+            "actionType": _validate_7bit_value(
+                _parse_int(raw_action.get("action_type", ACTION_TYPE_PRESS), "action_type"),
+                "action_type",
+            ),
+            "toggleType": _validate_7bit_value(
+                _parse_int(raw_action.get("toggle_type", TOGGLE_TYPE_POS_1), "toggle_type"),
+                "toggle_type",
+            ),
+        }
+
+    raise ValueError("aux switch kind must be fixed_function or cc")
+
+
+def _aux_action_sort_key(action: dict[str, Any]) -> tuple[int, int, int, str]:
+    topology_order = 0 if action.get("topology") == "resistor_ladder_aux" else 1
+    aux_switch = int(action.get("auxSwitch", 0))
+    omniport = int(action.get("omniport", 0))
+    slot = str(action.get("slot") or "")
+    return (topology_order, omniport, aux_switch, slot)
+
+
+def _build_draft_omniport_configs(aux_actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, int], dict[str, Any]] = {}
+    for action in aux_actions:
+        topology = str(action["topology"])
+        omniport = int(action["omniport"])
+        key = (topology, omniport)
+        config = grouped.get(key)
+        if config is None:
+            config = {
+                "omniport": omniport,
+                "mode": topology,
+            }
+            if topology == "resistor_ladder_aux":
+                config["switches"] = []
+            else:
+                config["slots"] = []
+            grouped[key] = config
+
+        if topology == "resistor_ladder_aux":
+            config["switches"].append(action)
+        else:
+            config["slots"].append(action)
+
+    configs = list(grouped.values())
+    for config in configs:
+        if config["mode"] == "resistor_ladder_aux":
+            config["switches"].sort(key=lambda item: int(item.get("auxSwitch", 0)))
+        else:
+            config["slots"].sort(key=lambda item: str(item.get("slot") or ""))
+    configs.sort(key=lambda item: (int(item["omniport"]), str(item["mode"])))
+    return configs
+
+
+def _extract_draft_controller_aux_actions(controller_data: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    controller_aux_actions: list[dict[str, Any]] = []
+    controller_aux_topologies: list[str] = []
+
+    draft_metadata = controller_data.get("draftMetadata")
+    if isinstance(draft_metadata, dict):
+        inferred_topologies = draft_metadata.get("inferredTopologies", [])
+        if isinstance(inferred_topologies, list):
+            controller_aux_topologies = [str(item) for item in inferred_topologies]
+
+    if controller_data.get("type") == "controller_settings_all":
+        data = controller_data.get("data")
+        if isinstance(data, dict):
+            resistor_ladder = data.get("resistor_ladder_aux")
+            if isinstance(resistor_ladder, dict):
+                switches = resistor_ladder.get("switches", [])
+                if isinstance(switches, list):
+                    controller_aux_actions.extend(
+                        [item for item in switches if isinstance(item, dict)]
+                    )
+
+            omniports = data.get("omniports")
+            if isinstance(omniports, dict):
+                aux_switches = omniports.get("auxSwitches", [])
+                if isinstance(aux_switches, list):
+                    controller_aux_actions.extend(
+                        [item for item in aux_switches if isinstance(item, dict)]
+                    )
+
+    event_processor = controller_data.get("eventProcessor")
+    if isinstance(event_processor, dict):
+        aux_switches = event_processor.get("auxSwitches", [])
+        if isinstance(aux_switches, list):
+            controller_aux_actions.extend(
+                [item for item in aux_switches if isinstance(item, dict)]
+            )
+
+    return controller_aux_actions, controller_aux_topologies
+
+
+def _build_draft_controller_data_from_aux_config(aux_actions: list[dict[str, Any]]) -> dict[str, Any]:
+    normalized_actions = []
+    seen_targets: set[tuple[str, int, int, str]] = set()
+    for index, raw_action in enumerate(aux_actions):
+        if not isinstance(raw_action, dict):
+            raise ValueError(f"aux_config_json[{index}] must be an object")
+        normalized = _normalize_aux_switch_spec(raw_action, index)
+        target_key = (
+            str(normalized["topology"]),
+            int(normalized["omniport"]),
+            int(normalized.get("auxSwitch", 0)),
+            str(normalized.get("slot") or ""),
+        )
+        if target_key in seen_targets:
+            raise ValueError("Duplicate aux target entry in aux_config_json")
+        seen_targets.add(target_key)
+        normalized_actions.append(normalized)
+
+    normalized_actions.sort(key=_aux_action_sort_key)
+    omniport_configs = _build_draft_omniport_configs(normalized_actions)
+    inferred_topologies = sorted({str(action["topology"]) for action in normalized_actions})
+    trs_aux_actions = [
+        action for action in normalized_actions if action.get("topology") == "trs_aux"
+    ]
+    resistor_ladder_actions = [
+        action
+        for action in normalized_actions
+        if action.get("topology") == "resistor_ladder_aux"
+    ]
+    return {
+        "type": "controller_settings_all",
+        "data": {
+            "omniports": {
+                "schemaVersion": DRAFT_CONTROLLER_DATA_VERSION,
+                "source": "inferred-from-editor-controller_settings_all",
+                "omniportConfigs": omniport_configs,
+                "auxSwitches": trs_aux_actions,
+            },
+            "resistor_ladder_aux": {
+                "schemaVersion": DRAFT_CONTROLLER_DATA_VERSION,
+                "source": "inferred-from-editor-controller_settings_all",
+                "omniport": 1,
+                "switches": resistor_ladder_actions,
+            },
+        },
+        "draftMetadata": {
+            "compatibility": "draft-controller-data-only",
+            "inferredTopologies": inferred_topologies,
+            "draftAuxSummary": normalized_actions,
+            "notes": [
+                "This structure is intended for backup generation and reverse engineering.",
+                "The top-level wrapper mirrors the editor's controller_settings_all serializer path.",
+                "aux_switch entries are modeled as Omniport 1 resistor-ladder aux switches.",
+                "TRS aux entries are modeled per omniport slot: tip, ring, or tip+ring.",
+                "Live controller-settings restore transport is still unresolved.",
+            ],
+        },
+    }
+
+
+def _build_controller_data_tool_result(
+    controller_data: dict[str, Any],
+    pretty: bool,
+) -> dict[str, Any]:
+    aux_actions = controller_data["draftMetadata"].get("draftAuxSummary", [])
+    inferred_topologies = controller_data["draftMetadata"].get("inferredTopologies", [])
+
+    return {
+        "status": "completed",
+        "decoded": {
+            "kind": "controller-data",
+            "draft": True,
+            "schema_version": DRAFT_CONTROLLER_DATA_VERSION,
+            "wrapper_type": controller_data.get("type", ""),
+            "inferred_topologies": inferred_topologies,
+            "aux_switch_count": len(aux_actions),
+            "aux_actions": [
+                {
+                    "topology": action.get("topology", ""),
+                    "omniport": action.get("omniport", 0),
+                    "aux_switch": action.get("auxSwitch", 0),
+                    "slot": action.get("slot", ""),
+                    "kind": action["kind"],
+                    "summary": action.get("function") or f"CC {action.get('ccNumber', 0)}",
+                }
+                for action in aux_actions
+            ],
+        },
+        "controller_data_json": _dump_json(controller_data, pretty=pretty),
     }
 
 
@@ -1921,6 +2943,58 @@ def probe_get_toggle_states(
 
 
 @mcp.tool()
+def probe_get_controller_settings_all(
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    txn_id: int = 7,
+) -> dict[str, Any]:
+    """Request the controller-settings-all container through the editor-backed request function opcode."""
+    result = _run_probe(
+        op2=0x00,
+        op3=REQUEST_CONTROLLER_SETTINGS_ALL,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
+    response = _ensure_success(result["response"])
+    result["decoded"] = {
+        "request": "controller_settings_all",
+        "payload_size": len(response["payload"]),
+        "opcode_2": response["opcode_2"],
+        "opcode_3": response["opcode_3"],
+    }
+    return result
+
+
+@mcp.tool()
+def probe_get_controller_omniport_data(
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    txn_id: int = 8,
+) -> dict[str, Any]:
+    """Request the Omniport controller-settings section through the editor-backed request function opcode."""
+    result = _run_probe(
+        op2=0x00,
+        op3=REQUEST_OMNIPORT_DATA,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
+    response = _ensure_success(result["response"])
+    result["decoded"] = {
+        "request": "omniport_data",
+        "payload_size": len(response["payload"]),
+        "opcode_2": response["opcode_2"],
+        "opcode_3": response["opcode_3"],
+    }
+    return result
+
+
+@mcp.tool()
 def set_current_bank_name(
     bank_name: str,
     save: bool = True,
@@ -2114,6 +3188,26 @@ def toggle_page(
 
 
 @mcp.tool()
+def send_editor_upload_complete_signal(
+    output_port: str = "",
+    txn_id: int = 43,
+) -> dict[str, Any]:
+    """Send the editor's observed post-upload completion signal as a fire-and-forget probe."""
+    result = _send_function_without_response(
+        op2=0x07,
+        op3=0x00,
+        op4=0x31,
+        op5=0x00,
+        output_port=output_port,
+        txn_id=txn_id,
+    )
+    result["decoded"] = {
+        "function": "editor_upload_complete_signal",
+    }
+    return result
+
+
+@mcp.tool()
 def set_preset_message_raw(
     preset: str,
     message_slot: int,
@@ -2194,6 +3288,88 @@ def set_preset_message_note(
         }
     )
     return result
+
+
+@mcp.tool()
+def set_controller_omniport_data_raw(
+    payload_json: str,
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    txn_id: int = 43,
+) -> dict[str, Any]:
+    """Write a raw Omniport controller-settings payload through the editor-backed save opcode."""
+    return _write_controller_settings_section_raw(
+        payload_json=payload_json,
+        section_name="omniport_data",
+        op3=WRITE_CONTROLLER_OMNIPORT_DATA,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
+
+
+@mcp.tool()
+def set_controller_event_processor_raw(
+    payload_json: str,
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    txn_id: int = 44,
+) -> dict[str, Any]:
+    """Write a raw event-processor payload through the editor-backed save opcode."""
+    return _write_controller_settings_section_raw(
+        payload_json=payload_json,
+        section_name="event_processor",
+        op3=WRITE_CONTROLLER_EVENT_PROCESSOR_DATA,
+        op4=0,
+        op5=0,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
+
+
+@mcp.tool()
+def set_controller_resistor_ladder_aux_raw(
+    payload_json: str,
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    txn_id: int = 45,
+) -> dict[str, Any]:
+    """Write a raw resistor-ladder aux payload through the editor-backed save opcode."""
+    return _write_controller_settings_section_raw(
+        payload_json=payload_json,
+        section_name="resistor_ladder_aux",
+        op3=WRITE_RESISTOR_LADDER_AUX_SWITCH_DATA,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
+
+
+@mcp.tool()
+def set_controller_midi_clock_slots_raw(
+    payload_json: str,
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    txn_id: int = 46,
+) -> dict[str, Any]:
+    """Write a raw MIDI clock slots payload through the editor-backed save opcode."""
+    return _write_controller_settings_section_raw(
+        payload_json=payload_json,
+        section_name="midi_clock_slots",
+        op3=WRITE_MIDI_CLOCK_SLOTS_DATA,
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+        txn_id=txn_id,
+    )
 
 
 @mcp.tool()
@@ -2432,6 +3608,39 @@ def program_current_bank_from_json(
 
 
 @mcp.tool()
+def upload_current_bank_from_json(
+    bank_json: str,
+    bank_number: int = 0,
+    output_port: str = "",
+    input_port: str = "",
+    timeout_ms: int = 15000,
+    include_expression_presets: bool = True,
+    include_bank_chunk: bool = True,
+) -> dict[str, Any]:
+    """Upload the current bank through the editor-style typed bank transport instead of per-message writes."""
+    bank_spec = _normalize_supported_bank_spec(_parse_json_argument(bank_json, "bank_json"))
+    upload = _run_editor_current_bank_upload(
+        chunks=_build_editor_current_bank_upload_chunks(
+            bank_spec=bank_spec,
+            bank_number=_validate_7bit_value(bank_number, "bank_number"),
+            include_expression_presets=include_expression_presets,
+            include_bank_chunk=include_bank_chunk,
+        ),
+        output_port=output_port,
+        input_port=input_port,
+        timeout_ms=timeout_ms,
+    )
+    upload["decoded"] = {
+        "bank_name": bank_spec["bank_name"],
+        "preset_count": len(bank_spec["presets"]),
+        "bank_number": bank_number,
+        "include_expression_presets": include_expression_presets,
+        "include_bank_chunk": include_bank_chunk,
+    }
+    return upload
+
+
+@mcp.tool()
 def build_current_bank_backup_json(
     bank_json: str,
     bank_number: int = 0,
@@ -2510,6 +3719,63 @@ def build_all_banks_backup_json(
 
 
 @mcp.tool()
+def build_aux_controller_data_json(
+    aux_config_json: str,
+    pretty: bool = True,
+) -> dict[str, Any]:
+    """Build a draft controllerData payload for aux switch mappings."""
+    raw_actions = _parse_json_argument(aux_config_json, "aux_config_json")
+    if not isinstance(raw_actions, list):
+        raise ValueError("aux_config_json must decode to an array of aux switch actions")
+
+    controller_data = _build_draft_controller_data_from_aux_config(raw_actions)
+    return _build_controller_data_tool_result(controller_data, pretty=pretty)
+
+
+@mcp.tool()
+def build_trs_aux_fixed_functions_controller_data_json(
+    omniport: int,
+    tip_function: str = "",
+    ring_function: str = "",
+    tip_ring_function: str = "",
+    pretty: bool = True,
+) -> dict[str, Any]:
+    """Build a draft controllerData payload for one Omniport configured as a TRS aux switch with fixed functions."""
+    if omniport < 1 or omniport > MC8_PRO_OMNIPORT_COUNT:
+        raise ValueError(f"omniport must be in 1..{MC8_PRO_OMNIPORT_COUNT}")
+
+    slot_specs = [
+        ("tip", tip_function),
+        ("ring", ring_function),
+        ("tip+ring", tip_ring_function),
+    ]
+    aux_actions: list[dict[str, Any]] = []
+    for slot_name, function_name in slot_specs:
+        normalized_function = function_name.strip().lower()
+        if not normalized_function:
+            continue
+        if normalized_function not in SUPPORTED_AUX_FIXED_FUNCTIONS:
+            raise ValueError(
+                "function must be one of: "
+                + ", ".join(sorted(SUPPORTED_AUX_FIXED_FUNCTIONS))
+            )
+        aux_actions.append(
+            {
+                "omniport": omniport,
+                "slot": slot_name,
+                "kind": "fixed_function",
+                "function": normalized_function,
+            }
+        )
+
+    if not aux_actions:
+        raise ValueError("At least one of tip_function, ring_function, or tip_ring_function must be set")
+
+    controller_data = _build_draft_controller_data_from_aux_config(aux_actions)
+    return _build_controller_data_tool_result(controller_data, pretty=pretty)
+
+
+@mcp.tool()
 def inspect_backup_json(
     backup_json: str,
 ) -> dict[str, Any]:
@@ -2537,6 +3803,22 @@ def inspect_backup_json(
         banks = bank_data.get("banks", [])
         arrangements = bank_data.get("bankArrangement", [])
         bank_names = [bank.get("bankName", "") for bank in banks if isinstance(bank, dict)]
+        controller_data = payload.get("controllerData")
+        controller_aux_actions: list[dict[str, Any]] = []
+        controller_aux_topologies: list[str] = []
+        if isinstance(controller_data, dict):
+            raw_controller_aux_actions, controller_aux_topologies = _extract_draft_controller_aux_actions(controller_data)
+            for aux_action in raw_controller_aux_actions:
+                controller_aux_actions.append(
+                    {
+                        "topology": aux_action.get("topology", ""),
+                        "omniport": aux_action.get("omniport", 0),
+                        "aux_switch": aux_action.get("auxSwitch", 0),
+                        "slot": aux_action.get("slot", ""),
+                        "kind": aux_action.get("kind", ""),
+                        "summary": aux_action.get("function") or aux_action.get("ccNumber", 0),
+                    }
+                )
         return {
             "status": "completed",
             "decoded": {
@@ -2545,6 +3827,10 @@ def inspect_backup_json(
                 "bank_names": bank_names,
                 "bank_arrangement_count": len(arrangements) if isinstance(arrangements, list) else 0,
                 "has_controller_data": "controllerData" in payload,
+                "controller_data_type": controller_data.get("type", "") if isinstance(controller_data, dict) else "",
+                "controller_aux_topologies": controller_aux_topologies,
+                "controller_aux_switch_count": len(controller_aux_actions),
+                "controller_aux_actions": controller_aux_actions,
             },
         }
 

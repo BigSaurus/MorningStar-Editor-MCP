@@ -594,7 +594,7 @@ set_current_bank_name(bank_name: str, save: bool = True, output_port: str = '', 
 
 **Notes**
 
-- save=False applies a temporary override that reverts on bank change.
+- save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.
 
 **Example**
 
@@ -631,7 +631,7 @@ set_preset_short_name(preset: str, short_name: str, save: bool = True, output_po
 
 **Notes**
 
-- save=False applies a temporary override that reverts on bank change.
+- save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.
 
 **Example**
 
@@ -668,7 +668,7 @@ set_preset_toggle_name(preset: str, toggle_name: str, save: bool = True, output_
 
 **Notes**
 
-- save=False applies a temporary override that reverts on bank change.
+- save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.
 
 **Example**
 
@@ -705,7 +705,7 @@ set_preset_long_name(preset: str, long_name: str, save: bool = True, output_port
 
 **Notes**
 
-- save=False applies a temporary override that reverts on bank change.
+- save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.
 
 **Example**
 

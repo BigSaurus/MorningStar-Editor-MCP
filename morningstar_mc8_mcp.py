@@ -1,7 +1,9 @@
+import copy
 import inspect
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -77,8 +79,19 @@ EDITOR_UPLOAD_STATUS_REQUEST_NEXT = 0x21
 MAX_RAW_MESSAGE_PAYLOAD_SIZE = 64
 MESSAGE_JSON_DATA_FIELD_COUNT = 18
 MC8_PRO_PRESET_COUNT = 16
-MC8_PRO_EDITOR_UPLOAD_PRESET_COUNT = 32
+MC8_PRO_EDITOR_UPLOAD_PRESET_COUNT = 24
 MC8_PRO_EDITOR_UPLOAD_EXP_PRESET_COUNT = 4
+# Editor connect handshake (over USB-MIDI cable 0) that opens the group-7 upload session.
+# (function_1, function_2, function_3, model_id) - reverse-engineered from a USBPcap capture.
+EDITOR_CONNECT_SEQUENCE = [
+    (0, 28, 0, MC8_PRO_MODEL_ID),
+    (3, 49, 0, MC8_PRO_MODEL_ID),
+    (0, 27, 0, 0x00),
+    (0, 44, 0, MC8_PRO_MODEL_ID),
+    (3, 49, 0, MC8_PRO_MODEL_ID),
+    (0, 64, 2, MC8_PRO_MODEL_ID),
+]
+EDITOR_ACK_FUNCTION_2 = 0x7F  # host acks each received frame: func(0, 127, <frame checksum>)
 DRAFT_CONTROLLER_DATA_VERSION = "draft-inferred-v2"
 
 SUPPORTED_AUX_TOPOLOGIES = {
@@ -296,7 +309,7 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         "transport": "request-response",
         "returns": "Returns the raw response plus a decoded echo of the target bank name and save mode.",
         "notes": [
-            "save=False applies a temporary override that reverts on bank change.",
+            "save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.",
         ],
         "example": "set_current_bank_name(bank_name='AFX 001-008', save=True, output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
     },
@@ -307,7 +320,7 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         "transport": "request-response",
         "returns": "Returns the raw response plus a decoded echo of the target short name.",
         "notes": [
-            "save=False applies a temporary override that reverts on bank change.",
+            "save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.",
         ],
         "example": "set_preset_short_name(preset='A', short_name='RECTO 1', save=True, output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
     },
@@ -318,7 +331,7 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         "transport": "request-response",
         "returns": "Returns the raw response plus a decoded echo of the target toggle name.",
         "notes": [
-            "save=False applies a temporary override that reverts on bank change.",
+            "save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.",
         ],
         "example": "set_preset_toggle_name(preset='A', toggle_name='Drive On', save=True, output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
     },
@@ -329,7 +342,7 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         "transport": "request-response",
         "returns": "Returns the raw response plus a decoded echo of the target long name.",
         "notes": [
-            "save=False applies a temporary override that reverts on bank change.",
+            "save=False applies a temporary override that reverts on bank change; even save=True is RAM-only and is LOST on power-cycle. For permanent (flash) storage, generate a file with build_editor_native_restore_file and import it in the official editor.",
         ],
         "example": "set_preset_long_name(preset='A', long_name='Recto Rhythm', save=True, output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2')",
     },
@@ -1869,13 +1882,15 @@ def _editor_empty_message_bytes(message_number: int) -> list[int]:
 
 def _editor_message_bytes_for_kind(message_number: int, message_spec: dict[str, Any]) -> list[int]:
     kind = message_spec["kind"]
+    # MC8 stores the message MIDI channel 1-based (channel 1 -> byte 1); specs use 0-based.
+    channel_byte = _validate_7bit_value(message_spec["midi_channel"] + 1, "midi_channel")
     if kind == "pc":
         data_fields = [message_spec["program"], 0, 0] + [0] * 15
         return [
             message_number,
             MESSAGE_TYPE_PC,
             *data_fields[:3],
-            message_spec["midi_channel"],
+            channel_byte,
             message_spec["action_type"],
             message_spec["toggle_type"],
             *data_fields[3:],
@@ -1887,7 +1902,7 @@ def _editor_message_bytes_for_kind(message_number: int, message_spec: dict[str, 
             message_number,
             MESSAGE_TYPE_CC,
             *data_fields[:3],
-            message_spec["midi_channel"],
+            channel_byte,
             message_spec["action_type"],
             message_spec["toggle_type"],
             *data_fields[3:],
@@ -1960,7 +1975,7 @@ def _encode_editor_preset_chunk(
         0x7F,
         0x00,
         0x03,
-        _validate_7bit_value(bank_number, "bank_number"),
+        _validate_7bit_value(bank_number + 1, "bank_number"),  # preset header bank number is 1-based
         _validate_7bit_value(preset_spec["preset_number"], "preset_number"),
         1 if is_exp else 0,
     ]
@@ -1995,7 +2010,7 @@ def _encode_editor_preset_chunk(
             preset_spec.get("shift_background_color", 0),
         ]
     )
-    payload.extend([0] * 19)
+    payload.extend([0] * 18)  # flags record carries 13 named values + 18 pad = 31 data bytes
     payload.extend([0x7F, 0x06, MC8_PRO_SHORT_NAME_SIZE])
     payload.extend(
         _encode_ascii_payload(
@@ -2142,139 +2157,124 @@ def _send_editor_sysex_with_retry(
         raise RuntimeError(f"Failed to send editor sysex for {context}: {last_error}") from last_error
 
 
+def _editor_ack_frame(out_port: mido.ports.BaseOutput, full_frame: list[int]) -> None:
+    """Acknowledge a received device frame: func(0, 127, <that frame's checksum byte>)."""
+    checksum = full_frame[-2] if len(full_frame) >= 2 else 0
+    ack = _build_editor_sysex(function_1=0, function_2=EDITOR_ACK_FUNCTION_2, function_3=checksum)
+    _send_editor_sysex_with_retry(out_port, ack, context="ack")
+
+
+def _editor_drain_and_ack(in_port: mido.ports.BaseInput, out_port: mido.ports.BaseOutput, seconds: float) -> int:
+    got = 0
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        for incoming in in_port.iter_pending():
+            if incoming.type != "sysex":
+                continue
+            full = [0xF0, *list(incoming.data), 0xF7]
+            if full[1:4] == MORNINGSTAR_MANUFACTURER_ID:
+                got += 1
+                _editor_ack_frame(out_port, full)
+        time.sleep(0.004)
+    return got
+
+
+def _editor_open_session(in_port: mido.ports.BaseInput, out_port: mido.ports.BaseOutput) -> int:
+    """Replay the editor connect handshake so the device will accept a group-7 upload."""
+    total = 0
+    for f1, f2, f3, model in EDITOR_CONNECT_SEQUENCE:
+        req = _build_editor_sysex(function_1=f1, function_2=f2, function_3=f3, model_id=model)
+        _send_editor_sysex_with_retry(out_port, req, context="connect")
+        total += _editor_drain_and_ack(in_port, out_port, 0.8)
+    total += _editor_drain_and_ack(in_port, out_port, 1.0)
+    return total
+
+
 def _run_editor_current_bank_upload(
     chunks: list[dict[str, Any]],
     output_port: str,
     input_port: str,
     timeout_ms: int,
 ) -> dict[str, Any]:
+    """Persist a bank to flash over USB-MIDI cable 0 via the editor group-7 protocol.
+
+    Flow (reverse-engineered from a USBPcap capture and hardware-validated):
+    connect handshake -> func(7,0,48,0) start -> per device request-next func(7,0,33): send the next
+    chunk then ack func(0,127,checksum) -> func(7,0,49,0) commit. The device ends with a terminal 0x03
+    that is benign once all chunks are sent; the data is committed to flash and survives a power-cycle.
+    Requires the primary Morningstar port pair (cable 0). NOTE: after an upload the controller stays in
+    editor-session mode (real-time 0x70 probes are disabled) until it is power-cycled.
+    """
     if timeout_ms < 100 or timeout_ms > 60000:
         raise ValueError("timeout_ms must be in 100..60000")
 
     out_name = _resolve_out_port(output_port)
     in_name = _resolve_in_port(input_port)
     start_request = _build_editor_sysex(
-        function_1=EDITOR_UPLOAD_OPCODE_2,
-        function_2=0,
-        function_3=EDITOR_UPLOAD_START_OPCODE_4,
-        function_4=0,
+        function_1=EDITOR_UPLOAD_OPCODE_2, function_2=0, function_3=EDITOR_UPLOAD_START_OPCODE_4, function_4=0
     )
-    finalize_request = _build_editor_sysex(
-        function_1=EDITOR_UPLOAD_OPCODE_2,
-        function_2=0,
-        function_3=EDITOR_UPLOAD_FINALIZE_OPCODE_4,
-        function_4=0,
+    commit_request = _build_editor_sysex(
+        function_1=EDITOR_UPLOAD_OPCODE_2, function_2=0, function_3=EDITOR_UPLOAD_FINALIZE_OPCODE_4, function_4=0
     )
 
     remaining = [dict(chunk) for chunk in chunks]
-    sent_chunks: list[dict[str, Any]] = []
-    received: list[dict[str, Any]] = []
-    finalized = False
-    deadline = time.time() + (timeout_ms / 1000.0)
+    total_chunks = len(chunks)
+    sent = 0
+    committed = False
+    status = None
 
     with mido.open_input(in_name) as in_port, mido.open_output(out_name) as out_port:
+        handshake_frames = _editor_open_session(in_port, out_port)
         _send_editor_sysex_with_retry(out_port, start_request, context="upload start")
+        deadline = time.time() + (timeout_ms / 1000.0)
 
-        while time.time() < deadline:
+        while time.time() < deadline and status is None:
             for incoming in in_port.iter_pending():
                 if incoming.type != "sysex":
-                    received.append({"type": incoming.type, "repr": str(incoming)})
                     continue
-
                 full = [0xF0, *list(incoming.data), 0xF7]
-                if not _is_morningstar_editor_sysex(full):
-                    received.append({"type": "sysex", "hex": _bytes_to_hex(full), "matched": False})
+                if full[1:4] != MORNINGSTAR_MANUFACTURER_ID or len(full) < 9:
                     continue
-
-                parsed = _parse_editor_sysex(full)
-                received.append(parsed)
-                status = _normalize_editor_upload_status(
-                    _extract_editor_upload_status(parsed),
-                    sent_chunks_count=len(sent_chunks),
-                    finalized=finalized,
-                )
-                if status is None:
-                    continue
-                if status == EDITOR_UPLOAD_STATUS_FAILED:
-                    # Some MC8 Pro sessions end the transfer with 0x03 after all
-                    # payload chunks were accepted. Treat that terminal 0x03 as a
-                    # successful completion once finalize has been sent or once all
-                    # payload chunks have already been consumed.
-                    if finalized or (not remaining and len(sent_chunks) == len(chunks)):
-                        return {
-                            "status": "completed",
-                            "out_port": out_name,
-                            "in_port": in_name,
-                            "sent_chunks": sent_chunks,
-                            "received": received,
-                            "finalize_request_hex": _bytes_to_hex(finalize_request),
-                            "start_request_hex": _bytes_to_hex(start_request),
-                            "note": "device replied 0x03 after all upload chunks were accepted",
-                        }
-                    return {
-                        "status": "device_failed",
-                        "out_port": out_name,
-                        "in_port": in_name,
-                        "sent_chunks": sent_chunks,
-                        "received": received,
-                        "finalize_request_hex": _bytes_to_hex(finalize_request),
-                        "start_request_hex": _bytes_to_hex(start_request),
-                    }
-                if status == EDITOR_UPLOAD_STATUS_CONTROLLER_BACKUP_FAILED:
-                    return {
-                        "status": "controller_backup_failed",
-                        "out_port": out_name,
-                        "in_port": in_name,
-                        "sent_chunks": sent_chunks,
-                        "received": received,
-                        "finalize_request_hex": _bytes_to_hex(finalize_request),
-                        "start_request_hex": _bytes_to_hex(start_request),
-                    }
-                if status == EDITOR_UPLOAD_STATUS_REQUEST_NEXT:
+                code = (full[6], full[7], full[8])  # (function group, sub, op)
+                if code == (EDITOR_UPLOAD_OPCODE_2, 0, EDITOR_UPLOAD_STATUS_COMPLETED):
+                    status = "completed"
+                    break
+                if code == (EDITOR_UPLOAD_OPCODE_2, 0, EDITOR_UPLOAD_STATUS_FAILED):
+                    # Terminal 0x03 is the normal end-of-transfer once all chunks are in.
+                    status = "completed" if (committed or (not remaining and sent == total_chunks)) else "device_failed"
+                    break
+                if code == (EDITOR_UPLOAD_OPCODE_2, 0, EDITOR_UPLOAD_STATUS_REQUEST_NEXT):
                     if remaining:
-                        next_chunk = remaining.pop(0)
-                        request = _build_editor_sysex(
+                        c = remaining.pop(0)
+                        sent += 1
+                        req = _build_editor_sysex(
                             function_1=EDITOR_UPLOAD_OPCODE_2,
-                            function_2=next_chunk["op3"],
-                            function_3=next_chunk["op4"],
-                            function_4=next_chunk["op5"],
-                            payload=next_chunk["payload"],
+                            function_2=c["op3"],
+                            function_3=c["op4"],
+                            function_4=c["op5"],
+                            payload=c["payload"],
                         )
-                        _send_editor_sysex_with_retry(
-                            out_port,
-                            request,
-                            context=f"upload chunk {len(sent_chunks) + 1}/{len(chunks)} ({next_chunk['type']})",
-                        )
-                        sent_chunks.append(
-                            {
-                                "type": next_chunk["type"],
-                                "request_hex": _bytes_to_hex(request),
-                            }
-                        )
-                    elif not finalized:
-                        _send_editor_sysex_with_retry(out_port, finalize_request, context="upload finalize")
-                        finalized = True
-                    continue
-                if status == EDITOR_UPLOAD_STATUS_COMPLETED:
-                    return {
-                        "status": "completed",
-                        "out_port": out_name,
-                        "in_port": in_name,
-                        "sent_chunks": sent_chunks,
-                        "received": received,
-                        "finalize_request_hex": _bytes_to_hex(finalize_request),
-                        "start_request_hex": _bytes_to_hex(start_request),
-                    }
-            time.sleep(0.01)
+                        _send_editor_sysex_with_retry(out_port, req, context=f"chunk {sent}/{total_chunks}")
+                        _editor_ack_frame(out_port, full)
+                    elif not committed:
+                        committed = True
+                        _send_editor_sysex_with_retry(out_port, commit_request, context="commit")
+                        _editor_ack_frame(out_port, full)
+                    else:
+                        _editor_ack_frame(out_port, full)
+                else:
+                    _editor_ack_frame(out_port, full)
+            time.sleep(0.005)
 
     return {
-        "status": "timeout",
+        "status": status or "timeout",
         "out_port": out_name,
         "in_port": in_name,
-        "sent_chunks": sent_chunks,
-        "received": received,
-        "finalize_request_hex": _bytes_to_hex(finalize_request),
-        "start_request_hex": _bytes_to_hex(start_request),
+        "handshake_frames": handshake_frames,
+        "chunks_total": total_chunks,
+        "chunks_sent": sent,
+        "committed": committed,
+        "note": "controller stays in editor-session mode until power-cycled; data is committed to flash",
     }
 
 
@@ -3617,7 +3617,15 @@ def upload_current_bank_from_json(
     include_expression_presets: bool = True,
     include_bank_chunk: bool = True,
 ) -> dict[str, Any]:
-    """Upload the current bank through the editor-style typed bank transport instead of per-message writes."""
+    """Persist a bank to the MC8's FLASH over USB-MIDI via the editor group-7 protocol.
+
+    Hardware-validated 2026-07-03: writes survive a power-cycle. Runs a connect handshake, then the
+    ACK-driven upload loop (see _run_editor_current_bank_upload), on the PRIMARY Morningstar port pair
+    (cable 0) - pass output_port/input_port='' to auto-select it. bank_number is 0-based (bank 1 = 0).
+    A "completed" status (incl. the benign terminal 0x03) means the data was committed to flash.
+    IMPORTANT: the controller stays in editor-session mode (0x70 real-time probes disabled) until you
+    power-cycle it after the upload. Unlike the 0x70 setters, this is the only MCP path that persists.
+    """
     bank_spec = _normalize_supported_bank_spec(_parse_json_argument(bank_json, "bank_json"))
     upload = _run_editor_current_bank_upload(
         chunks=_build_editor_current_bank_upload_chunks(
@@ -3715,6 +3723,158 @@ def build_all_banks_backup_json(
             "kind": "all-banks-backup",
         },
         "backup_json": _dump_json(backup, pretty=pretty),
+    }
+
+
+def _editor_backup_stringify(data: Any) -> str:
+    # Mirror JS JSON.stringify(data): compact separators, key order preserved, non-ASCII kept.
+    return json.dumps(data, separators=(",", ":"), ensure_ascii=False)
+
+
+def _editor_backup_java_hash(data: Any) -> int:
+    # Editor calculateCheckSum-style integrity hash: Java String.hashCode of JSON.stringify(data).
+    string = _editor_backup_stringify(data)
+    h = 0
+    for ch in string:
+        h = (31 * h + ord(ch)) & 0xFFFFFFFF
+    return h - 0x100000000 if h >= 0x80000000 else h
+
+
+def _editor_backup_message(template_empty: dict[str, Any], slot: int, channel: int,
+                           t: int = 0, d0: int = 0, d1: int = 0) -> dict[str, Any]:
+    msg = copy.deepcopy(template_empty)
+    msg["m"] = slot
+    msg["c"] = channel
+    msg["t"] = t
+    msg["a"] = 1 if t != 0 else 0
+    data = [0] * len(msg["data"])
+    if t != 0:
+        data[0] = d0
+        data[1] = d1
+    msg["data"] = data
+    return msg
+
+
+def _editor_backup_msgarray(active: list[tuple[int, int, int]], slot_count: int,
+                            template_empty: dict[str, Any], channel: int) -> list[dict[str, Any]]:
+    arr: list[dict[str, Any]] = []
+    for slot in range(slot_count):
+        if slot < len(active):
+            t, d0, d1 = active[slot]
+            arr.append(_editor_backup_message(template_empty, slot, channel, t, d0, d1))
+        else:
+            arr.append(_editor_backup_message(template_empty, slot, channel))
+    return arr
+
+
+def _editor_backup_active_from_entry(entry: dict[str, Any]) -> list[tuple[int, int, int]]:
+    # A layout page entry -> ordered editor JSON messages (t: 2=CC, 1=PC).
+    if "cc0" in entry and "pc" in entry:
+        return [
+            (MESSAGE_TYPE_CC, 0, int(entry["cc0"])),   # CC0 bank-select MSB, value = bank
+            (MESSAGE_TYPE_PC, int(entry["pc"]), 0),    # program change
+        ]
+    if "cc_number" in entry and "cc_value" in entry:
+        return [(MESSAGE_TYPE_CC, int(entry["cc_number"]), int(entry["cc_value"]))]
+    return []
+
+
+@mcp.tool()
+def build_editor_native_restore_file(
+    base_backup_path: str,
+    layout_json: str,
+    output_path: str,
+    midi_channel: int = 1,
+) -> dict[str, Any]:
+    """Generate an editor-IMPORTABLE all-banks backup file (native schema + valid hash).
+
+    This is the only MCP path that yields a file the official Morningstar editor will restore to
+    FLASH so it survives a power-cycle. (MCP MIDI writes via the 0x70 path are RAM-only, and the
+    persistent group-7 upload protocol is served over the controller's USB-serial interface, not
+    MIDI - see upload_current_bank_from_json.) It clones a real editor all-banks backup for schema,
+    controller settings, preset field shape, and hash algorithm, then regenerates the banks named in
+    layout_json in the editor's exact native encoding and recomputes the integrity hash.
+
+    base_backup_path: path to a real editor all-banks backup JSON (dumpType allBanks, data.bankArray).
+    layout_json: JSON array of layout bank objects (like axefx_factory_layout.json). Array index i
+        maps to editor bank i+1. Each object: {bank_name, page_1:[{mc8_preset,cc0,pc,short_name,long_name}
+        or {mc8_preset,cc_number,cc_value,...}], page_2:[...scene entries...]}. A null element leaves
+        that bank unchanged from the base backup.
+    output_path: where to write the importable backup file.
+    """
+    base = json.loads(Path(base_backup_path).read_text(encoding="utf-8"))
+    if not (isinstance(base.get("data"), dict) and isinstance(base["data"].get("bankArray"), list)):
+        raise ValueError("base_backup_path must be a real editor all-banks backup (data.bankArray)")
+    if base.get("hash") != _editor_backup_java_hash(base["data"]):
+        raise ValueError("base backup hash does not validate; not a clean editor backup")
+
+    layout = _parse_json_argument(layout_json, "layout_json")
+    if not isinstance(layout, list):
+        raise ValueError("layout_json must decode to an array of layout bank objects")
+
+    bank_array = base["data"]["bankArray"]
+    template_preset = copy.deepcopy(bank_array[0]["presetArray"][0])
+    slot_count = len(template_preset["msgArray"])
+    empty_msg = copy.deepcopy(template_preset["msgArray"][2])
+    empty_msg["t"] = 0
+    empty_msg["a"] = 0
+    empty_msg["data"] = [0] * len(empty_msg["data"])
+
+    changed: list[int] = []
+    for index, lb in enumerate(layout):
+        if lb is None:
+            continue
+        if index >= len(bank_array):
+            raise ValueError(f"layout index {index} exceeds base bankArray length {len(bank_array)}")
+        bank = bank_array[index]
+        if "bank_name" in lb or "bankName" in lb:
+            bank["bankName"] = str(lb.get("bank_name") or lb.get("bankName"))
+        presets = bank["presetArray"]
+        page_1 = lb.get("page_1", []) or []
+        page_2 = lb.get("page_2", []) or []
+
+        for slot, entry in enumerate(page_1[:8]):
+            p = presets[slot]
+            p["shortName"] = str(entry.get("short_name", ""))
+            p["longName"] = str(entry.get("long_name", entry.get("short_name", "")))
+            p["toggleName"] = ""
+            p["shiftName"] = ""
+            p["msgArray"] = _editor_backup_msgarray(
+                _editor_backup_active_from_entry(entry), slot_count, empty_msg, midi_channel)
+        for offset, entry in enumerate(page_2[:8]):
+            p = presets[8 + offset]
+            p["shortName"] = str(entry.get("short_name", ""))
+            p["longName"] = str(entry.get("long_name", entry.get("short_name", "")))
+            p["toggleName"] = ""
+            p["shiftName"] = ""
+            p["msgArray"] = _editor_backup_msgarray(
+                _editor_backup_active_from_entry(entry), slot_count, empty_msg, midi_channel)
+        for slot in range(16, len(presets)):
+            p = presets[slot]
+            p["shortName"] = ""
+            p["longName"] = ""
+            p["toggleName"] = ""
+            p["shiftName"] = ""
+            p["msgArray"] = _editor_backup_msgarray([], slot_count, empty_msg, midi_channel)
+        changed.append(index)
+
+    base["hash"] = _editor_backup_java_hash(base["data"])
+    base["description"] = "MCP-generated editor-native restore file"
+    out_string = _editor_backup_stringify(base)
+    Path(output_path).write_text(out_string, encoding="utf-8")
+
+    reread = json.loads(Path(output_path).read_text(encoding="utf-8"))
+    hash_valid = reread["hash"] == _editor_backup_java_hash(reread["data"])
+    return {
+        "status": "completed",
+        "output_path": output_path,
+        "hash_valid": hash_valid,
+        "banks_regenerated": len(changed),
+        "bank_index_range": [changed[0], changed[-1]] if changed else [],
+        "decoded": {
+            "kind": "editor-native-all-banks-restore",
+            "importable_via": "official Morningstar editor -> Restore all banks (commits to flash)",
+        },
     }
 
 

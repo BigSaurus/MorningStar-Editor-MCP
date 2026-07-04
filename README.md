@@ -6,7 +6,7 @@ GitHub repository name: `MorningStar-Editor-MCP`
 
 Current license: PolyForm Noncommercial 1.0.0. That means people can use, study, and share this project for noncommercial purposes, but not for commercial use.
 
-This project exposes the MC8 Pro as a regular stdio MCP server, with live probe tools, bank navigation, preset-label editing, documented PC and CC message programming, and offline Morningstar-style backup JSON helpers.
+This project exposes the MC8 Pro as a regular stdio MCP server, with live probe tools, bank navigation, preset-label editing, documented PC and CC message programming, offline Morningstar-style backup JSON helpers, and — via a reverse-engineered editor protocol — **persistent bank writes that commit to the controller's flash and survive a power-cycle**.
 
 ## Quick start
 
@@ -46,6 +46,22 @@ If the correct MIDI port names are not known yet, connect through your MCP clien
 - write `CC0 + optional CC32 + PC` into adjacent message slots
 - program the selected bank from JSON
 - generate and inspect Morningstar-style backup JSON locally
+- **persistently upload a full bank to flash** over the reverse-engineered editor group-7 protocol (survives a power-cycle)
+- **generate an editor-importable, hash-valid all-banks backup file** for restore through the official editor
+
+## Persistent bank writes (editor protocol)
+
+The documented `0x70` SysEx write functions only edit the controller's working memory: `save=True` (opcode `0x7F`) keeps an edit across bank changes but it is **lost on power-cycle**. Committing to flash uses a separate, undocumented **group-7 upload protocol** that the official editor runs over USB MIDI.
+
+That protocol was reverse-engineered from a USB capture of a real editor restore and is now implemented here:
+
+- `upload_current_bank_from_json` — runs the editor connect handshake, streams the bank/preset chunks with the device's request/ACK flow, and commits to flash. Hardware-validated to survive a power-cycle. Runs on the primary Morningstar port pair (cable 0).
+- `build_editor_native_restore_file` — offline, generates an editor-native, hash-valid all-banks backup file from a layout, so you can restore through the official editor without touching the device from code.
+
+Two caveats:
+
+- After an `upload_current_bank_from_json` call the controller stays in editor-session mode (real-time `0x70` probes are disabled) until you power-cycle it. The flash write itself is already committed.
+- The `0x70` name/message setters remain working-memory only. Use the upload tool (or an editor restore) when you need changes to persist.
 
 ## License
 

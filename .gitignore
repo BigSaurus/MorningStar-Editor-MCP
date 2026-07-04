@@ -13,7 +13,7 @@ env/
 build/
 dist/
 *.egg-info/
-.wheeltest/
+.wheeltest*/
 
 .env
 .env.*

@@ -8,6 +8,8 @@ Current license: PolyForm Noncommercial 1.0.0. That means people can use, study,
 
 This project exposes the MC8 Pro as a regular stdio MCP server, with live probe tools, bank navigation, preset-label editing, documented PC and CC message programming, offline Morningstar-style backup JSON helpers, and — via a reverse-engineered editor protocol — **persistent bank writes that commit to the controller's flash and survive a power-cycle**.
 
+The draft controllerData helper currently models two inferred aux-setting topologies: Omniport 1 resistor-ladder aux switches via `aux_switch`, and TRS aux slots via `omniport` plus `slot`. These are still backup-generation drafts, not proven live restore payloads.
+
 ## Quick start
 
 Install from the standalone repo root with:
@@ -294,13 +296,15 @@ After readback works reliably, add narrow writes with clear response handling.
 
 Morningstar documents a save-vs-override behavior for many write functions:
 
-- `0x7F` in the save opcode field commits to memory
+- `0x7F` in the save opcode field commits to the working bank buffer
 - other values act as temporary override and revert on bank change
 
 That gives us a useful workflow distinction:
 
 - non-destructive live overrides for testing
-- explicit saved writes for committed changes
+- `0x7F` saved writes that persist across bank changes within a session
+
+Important: `0x7F` here is **working memory only** — these `0x70` writes do **not** survive a power-cycle. Committing to flash requires the group-7 upload path (see "Persistent bank writes (editor protocol)" above).
 
 ### Narrow preset-message editing layer
 
@@ -442,21 +446,20 @@ This gives us:
 
 This is the best short-term value.
 
-### Track B: later editor-protocol discovery
+### Track B: editor-protocol discovery
 
-If we later need full editor parity, the next move should be protocol discovery against official editor traffic, not browser or desktop UI automation.
+This track predicted that full editor parity would require protocol discovery against official editor traffic rather than browser or desktop UI automation — and that the wire protocol is richer than the public docs.
 
-That means capturing and comparing traffic for operations like:
+That prediction held. A USB capture of a real editor **all-banks restore** revealed the undocumented group-7 upload protocol (connect handshake, request/ACK chunk streaming, flash commit) running over USB MIDI. It is now implemented for persistent bank/preset writes (`upload_current_bank_from_json`); see "Persistent bank writes (editor protocol)" above.
 
-- full preset save
+Still open for future capture/decode work:
+
 - preset with non-PC/CC message types
 - waveform engine edits
 - sequencer engine edits
-- controller backup and restore
+- controller-settings (Omniport/aux/clock) backup and restore
 - scroll counter edits
 - MIDI channel routing edits
-
-The likely outcome is a richer internal protocol than what is currently documented publicly.
 
 ## Recommended next code target
 
@@ -513,3 +516,83 @@ It currently exposes four practical capability groups.
 - `program_current_bank_from_json`
 
 This tool accepts a supported bank JSON shape and programs the currently selected bank in-place.
+
+Supported inputs include:
+
+- a compact program spec with `bank_name`, `presets`, and `messages`
+- the generated Axe-Fx layout bank objects with `page_1` and `page_2`
+- a compatible `bankData.bank` backup object
+
+### 4. Draft backup JSON helpers
+
+- `build_current_bank_backup_json`
+- `build_aux_controller_data_json`
+- `build_all_banks_backup_json`
+- `inspect_backup_json`
+
+These tools build and inspect draft Morningstar-compatible backup containers from supported bank specs. They are intended for offline generation and reverse-engineering support, not yet for live restore.
+
+`build_aux_controller_data_json` adds a draft `controllerData` builder for aux switch mappings so all-banks backup containers can carry inferred controller-global settings alongside bank data.
+
+### Experimental raw-message tools
+
+- `set_preset_message_raw`
+- `set_preset_message_note`
+
+These exist so new message families can be tested without pretending we already have full editor-parity serializers. `set_preset_message_note` currently uses an inferred message-type id and should be treated as experimental until confirmed live.
+
+Optional environment variables:
+
+```env
+MORNINGSTAR_MC8_MIDI_OUT=Exact MIDI output port name
+MORNINGSTAR_MC8_MIDI_IN=Exact MIDI input port name
+```
+
+Run it with:
+
+```powershell
+python morningstar_mc8_mcp.py
+```
+
+When the controller is connected, the safest first live call is still:
+
+```text
+probe_get_controller_info
+```
+
+If multiple Morningstar virtual ports appear, pass the input and output port names explicitly and prefer a non-editor port where available.
+
+## Current practical scope
+
+The MCP is now good enough for:
+
+- current-bank inspection
+- current-bank naming updates
+- preset label updates
+- PC / CC / bank-select-plus-PC programming
+- controller bank navigation and page toggling
+- JSON-driven programming of the currently selected bank
+- generation of draft aux/controllerData payloads for reverse-engineering controller-global settings
+- generation and inspection of draft bank and all-banks backup JSON
+
+The MCP is still not a full replacement for the Morningstar editor.
+
+Not yet implemented as live MCP tools:
+
+- full editor message-family coverage beyond the documented PC/CC surface
+- full-bank live readback
+- all-banks restore to hardware
+- controller-global settings writes
+- profile switching/editing
+- full editor backup/restore transport
+
+## Current conclusion
+
+The best move is:
+
+1. use direct wired USB MIDI
+2. build on the documented SysEx API first
+3. keep scope limited to the documented read/write subset
+4. treat full editor parity as a separate reverse-engineering task if and when needed
+
+That gives the cleanest architecture with the least dependence on third-party UI layers.

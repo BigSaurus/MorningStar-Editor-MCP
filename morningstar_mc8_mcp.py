@@ -463,6 +463,27 @@ TOOL_REFERENCE_METADATA: dict[str, dict[str, Any]] = {
         ],
         "example": 'program_current_bank_from_json(bank_json=\'{"bank_name":"AFX 001-008","presets":[]}\', save=False, output_port=\'Morningstar MC8 Pro 3\', input_port=\'Morningstar MC8 Pro 2\', midi_channel=1, verify=False)',
     },
+    "safe_flash_bank": {
+        "group": "Bank Programming",
+        "safety": "write-flash",
+        "verification": "live-verified",
+        "transport": "editor-group-7",
+        "returns": (
+            "Guarded single-bank FLASH write: landmark-anchored navigation to the target bank, a "
+            "pre-write bank-name assertion that aborts on mismatch, then the persistent group-7 upload."
+        ),
+        "notes": [
+            "Preferred over raw upload_current_bank_from_json - prevents wrong-bank (off-by-one) corruption.",
+            "expect_current_bank_name is REQUIRED and is the guard; a mismatch raises BankPositionError and writes nothing.",
+            "anchor_bank_name must be a unique, correct bank name (e.g. the last programmed bank) at anchor_bank_number.",
+            "dry_run=True rehearses navigation + guard without writing.",
+            "After a real write the controller locks into editor-session mode: POWER-CYCLE before the next bank or verify. One bank per power-cycle.",
+        ],
+        "example": (
+            "safe_flash_bank(bank_json='{\"bank_name\":\"AFX 001-008\",\"presets\":[]}', target_bank_number=1, "
+            "expect_current_bank_name='AFX 009-016', anchor_bank_name='AFX 377-384', anchor_bank_number=48, dry_run=True)"
+        ),
+    },
     "build_current_bank_backup_json": {
         "group": "Offline Backup JSON",
         "safety": "offline-json",
@@ -3616,6 +3637,7 @@ def upload_current_bank_from_json(
     timeout_ms: int = 15000,
     include_expression_presets: bool = True,
     include_bank_chunk: bool = True,
+    expect_current_bank_name: str = "",
 ) -> dict[str, Any]:
     """Persist a bank to the MC8's FLASH over USB-MIDI via the editor group-7 protocol.
 
@@ -3623,9 +3645,19 @@ def upload_current_bank_from_json(
     ACK-driven upload loop (see _run_editor_current_bank_upload), on the PRIMARY Morningstar port pair
     (cable 0) - pass output_port/input_port='' to auto-select it. bank_number is 0-based (bank 1 = 0).
     A "completed" status (incl. the benign terminal 0x03) means the data was committed to flash.
+
+    WARNING: this writes to the bank the controller is CURRENTLY NAVIGATED TO. `bank_number` is only
+    embedded as chunk metadata - it does NOT choose the target bank. Uploading while parked on the
+    wrong bank silently corrupts that bank (this is how the factory layout got shifted). Prefer the
+    guarded `safe_flash_bank` tool, or pass `expect_current_bank_name` here: when set, the current bank
+    name is probed and MUST match before any write - a mismatch raises BankPositionError and nothing is
+    sent, converting silent corruption into a safe abort.
+
     IMPORTANT: the controller stays in editor-session mode (0x70 real-time probes disabled) until you
     power-cycle it after the upload. Unlike the 0x70 setters, this is the only MCP path that persists.
     """
+    if expect_current_bank_name:
+        _assert_current_bank_name(expect_current_bank_name, output_port, input_port)
     bank_spec = _normalize_supported_bank_spec(_parse_json_argument(bank_json, "bank_json"))
     upload = _run_editor_current_bank_upload(
         chunks=_build_editor_current_bank_upload_chunks(
@@ -3646,6 +3678,202 @@ def upload_current_bank_from_json(
         "include_bank_chunk": include_bank_chunk,
     }
     return upload
+
+
+class BankPositionError(RuntimeError):
+    """Raised when the controller is not confirmed to be on the intended bank before a flash write."""
+
+
+def _first_morningstar_input() -> str:
+    names = _list_inputs()
+    for name in names:
+        if name.startswith("Morningstar MC8 Pro"):
+            return name
+    candidates = _candidate_ports(names)
+    if candidates:
+        return candidates[0]
+    raise ValueError("No Morningstar MC8 input port found. Use list_midi_ports.")
+
+
+def _first_morningstar_output() -> str:
+    names = _list_outputs()
+    for name in names:
+        if name.startswith("Morningstar MC8 Pro"):
+            return name
+    candidates = _candidate_ports(names)
+    if candidates:
+        return candidates[0]
+    raise ValueError("No Morningstar MC8 output port found. Use list_midi_ports.")
+
+
+def _probe_bank_name_now(output_port: str, input_port: str) -> str:
+    """Best-effort read of the current bank name; '' if the probe times out (e.g. editor-session mode)."""
+    try:
+        return probe_get_current_bank_name(
+            output_port=output_port, input_port=input_port
+        )["decoded"]["bank_name"].strip()
+    except Exception:  # noqa: BLE001 - timeout / session-mode / port errors all mean "unknown"
+        return ""
+
+
+def _assert_current_bank_name(
+    expected: str,
+    output_port: str = "",
+    input_port: str = "",
+    retries: int = 6,
+    delay_seconds: float = 0.4,
+) -> str:
+    """Probe the current bank name and require it to equal `expected`, else raise BankPositionError.
+
+    This is the core anti-corruption guard: it runs BEFORE any flash write so that a navigation error
+    aborts loudly instead of overwriting the wrong bank. Empty/timeout reads (the controller sitting in
+    editor-session mode with probes disabled) never satisfy the check - power-cycle first.
+    """
+    want = expected.strip()
+    last = ""
+    for attempt in range(retries):
+        last = _probe_bank_name_now(output_port, input_port)
+        if last and last == want:
+            return last
+        if attempt < retries - 1:
+            time.sleep(delay_seconds)
+    raise BankPositionError(
+        f"Refusing to flash: current bank reads {last!r} but expected {want!r}. "
+        "Aborted before sending anything so the wrong bank is not corrupted. "
+        "Re-navigate to the intended bank (or power-cycle if the controller is in editor-session mode) and retry."
+    )
+
+
+def _navigate_steps(delta: int, output_port: str, delay_seconds: float) -> None:
+    step = bank_up if delta > 0 else bank_down
+    for _ in range(abs(delta)):
+        step(output_port=output_port)
+        time.sleep(delay_seconds)
+
+
+def _goto_bank_by_anchor(
+    anchor_bank_name: str,
+    anchor_bank_number: int,
+    target_bank_number: int,
+    output_port: str,
+    input_port: str,
+    delay_seconds: float,
+    max_walk: int = 130,
+) -> dict[str, Any]:
+    """Establish absolute position by walking bank-up to a KNOWN-UNIQUE landmark, then step to target.
+
+    Name->number lookup is deliberately avoided: corrupted banks report the wrong name, so only a
+    landmark name the caller vouches is unique and correct is trusted. Bank navigation wraps 1<->128,
+    so a bounded bank-up walk always meets the landmark if it exists. Returns the walk trail.
+    """
+    landmark = anchor_bank_name.strip()
+    walked = 0
+    for _ in range(max_walk):
+        if _probe_bank_name_now(output_port, input_port) == landmark:
+            break
+        bank_up(output_port=output_port)
+        time.sleep(delay_seconds)
+        walked += 1
+    else:
+        raise BankPositionError(
+            f"Could not find anchor bank {landmark!r} within {max_walk} bank-up steps; aborting before any write."
+        )
+    delta = target_bank_number - anchor_bank_number
+    _navigate_steps(delta, output_port, delay_seconds)
+    return {"anchor_walk_steps": walked, "steps_from_anchor": delta}
+
+
+@mcp.tool()
+def safe_flash_bank(
+    bank_json: str,
+    target_bank_number: int,
+    expect_current_bank_name: str,
+    anchor_bank_name: str = "",
+    anchor_bank_number: int = 0,
+    output_port: str = "",
+    input_port: str = "",
+    nav_delay_ms: int = 400,
+    timeout_ms: int = 20000,
+    include_expression_presets: bool = True,
+    include_bank_chunk: bool = True,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Guarded, position-verified flash write of ONE bank - the safe way to persist a bank.
+
+    Prevents the off-by-one bank corruption that the raw `upload_current_bank_from_json` allows. Steps:
+      1. Resolve the primary (cable 0) Morningstar port pair automatically, tolerating USB re-enumeration.
+      2. If `anchor_bank_name` is given, establish absolute position by walking bank-up to that
+         KNOWN-UNIQUE, CORRECT landmark (at `anchor_bank_number`, 1-based), then step to the target.
+         Omit the anchor only when the controller is already parked on the target bank.
+      3. GUARD: probe the current bank name and require it to equal `expect_current_bank_name` (the name
+         the target bank reads RIGHT NOW, before the fix). On mismatch it raises BankPositionError and
+         writes nothing.
+      4. Flash the bank via the group-7 protocol, then send the post-upload completion signal.
+
+    `dry_run=True` performs navigation + the guard and reports what it WOULD write, without flashing (no
+    session-mode lock) - use it to rehearse safely. After a real write the controller is locked in
+    editor-session mode: POWER-CYCLE the MC8 before flashing another bank or verifying. Flash one bank
+    per power-cycle. `target_bank_number` is 1-based; the 0-based value is embedded as chunk metadata.
+    """
+    if target_bank_number < 1 or target_bank_number > 128:
+        raise ValueError("target_bank_number must be in 1..128")
+    if not expect_current_bank_name.strip():
+        raise ValueError("expect_current_bank_name is required - it is the guard that prevents wrong-bank writes")
+
+    out_name = _resolve_out_port(output_port) if output_port else _first_morningstar_output()
+    in_name = _resolve_in_port(input_port) if input_port else _first_morningstar_input()
+    delay_seconds = max(nav_delay_ms, 0) / 1000.0
+
+    nav: dict[str, Any] = {"anchored": False}
+    if anchor_bank_name.strip():
+        if anchor_bank_number < 1 or anchor_bank_number > 128:
+            raise ValueError("anchor_bank_number must be in 1..128 when anchor_bank_name is set")
+        nav = _goto_bank_by_anchor(
+            anchor_bank_name=anchor_bank_name,
+            anchor_bank_number=anchor_bank_number,
+            target_bank_number=target_bank_number,
+            output_port=out_name,
+            input_port=in_name,
+            delay_seconds=delay_seconds,
+        )
+        nav["anchored"] = True
+
+    confirmed = _assert_current_bank_name(expect_current_bank_name, out_name, in_name)
+
+    result: dict[str, Any] = {
+        "out_port": out_name,
+        "in_port": in_name,
+        "target_bank_number": target_bank_number,
+        "confirmed_current_bank_name": confirmed,
+        "navigation": nav,
+    }
+
+    if dry_run:
+        result["status"] = "dry_run_ok"
+        result["would_write_bank_number_0based"] = target_bank_number - 1
+        result["note"] = "Guard passed; no data written (dry_run). Re-run with dry_run=False to flash."
+        return result
+
+    upload = upload_current_bank_from_json(
+        bank_json=bank_json,
+        bank_number=target_bank_number - 1,
+        output_port=out_name,
+        input_port=in_name,
+        timeout_ms=timeout_ms,
+        include_expression_presets=include_expression_presets,
+        include_bank_chunk=include_bank_chunk,
+    )
+    send_editor_upload_complete_signal(output_port=out_name)
+
+    result["status"] = upload.get("status")
+    result["chunks_sent"] = upload.get("chunks_sent")
+    result["chunks_total"] = upload.get("chunks_total")
+    result["committed"] = upload.get("committed")
+    result["post_state"] = (
+        "Flash committed. Controller is now in editor-session mode (probes + foot navigation locked). "
+        "POWER-CYCLE the MC8 before flashing another bank or verifying."
+    )
+    return result
 
 
 @mcp.tool()

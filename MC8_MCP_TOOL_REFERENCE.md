@@ -6,7 +6,7 @@ This file is generated from `morningstar_mc8_mcp.py`. It documents the regular M
 
 - Runtime model: regular MCP server over stdio
 - Primary server file: `morningstar_mc8_mcp.py`
-- Tool count: 33
+- Tool count: 34
 - Validated Windows ports in this workspace: output `Morningstar MC8 Pro 3`, input `Morningstar MC8 Pro 2`
 
 ## Categories
@@ -17,7 +17,7 @@ This file is generated from `morningstar_mc8_mcp.py`. It documents the regular M
 - Name and UI Writes: 5 tools
 - Navigation: 3 tools
 - Preset Message Programming: 5 tools
-- Bank Programming: 1 tools
+- Bank Programming: 2 tools
 - Offline Backup JSON: 5 tools
 
 ## Safety Levels
@@ -1100,6 +1100,67 @@ program_current_bank_from_json(bank_json: str, save: bool = True, output_port: s
 
 ```python
 program_current_bank_from_json(bank_json='{"bank_name":"AFX 001-008","presets":[]}', save=False, output_port='Morningstar MC8 Pro 3', input_port='Morningstar MC8 Pro 2', midi_channel=1, verify=False)
+```
+
+### `safe_flash_bank`
+
+Guarded, position-verified flash write of ONE bank - the safe way to persist a bank.
+
+    Prevents the off-by-one bank corruption that the raw `upload_current_bank_from_json` allows. Steps:
+      1. Resolve the primary (cable 0) Morningstar port pair automatically, tolerating USB re-enumeration.
+      2. If `anchor_bank_name` is given, establish absolute position by walking bank-up to that
+         KNOWN-UNIQUE, CORRECT landmark (at `anchor_bank_number`, 1-based), then step to the target.
+         Omit the anchor only when the controller is already parked on the target bank.
+      3. GUARD: probe the current bank name and require it to equal `expect_current_bank_name` (the name
+         the target bank reads RIGHT NOW, before the fix). On mismatch it raises BankPositionError and
+         writes nothing.
+      4. Flash the bank via the group-7 protocol, then send the post-upload completion signal.
+
+    `dry_run=True` performs navigation + the guard and reports what it WOULD write, without flashing (no
+    session-mode lock) - use it to rehearse safely. After a real write the controller is locked in
+    editor-session mode: POWER-CYCLE the MC8 before flashing another bank or verifying. Flash one bank
+    per power-cycle. `target_bank_number` is 1-based; the 0-based value is embedded as chunk metadata.
+
+- Safety: `write-flash`
+- Verification: `live-verified`
+- Transport: `editor-group-7`
+- Returns: Guarded single-bank FLASH write: landmark-anchored navigation to the target bank, a pre-write bank-name assertion that aborts on mismatch, then the persistent group-7 upload.
+
+**Signature**
+
+```python
+safe_flash_bank(bank_json: str, target_bank_number: int, expect_current_bank_name: str, anchor_bank_name: str = '', anchor_bank_number: int = 0, output_port: str = '', input_port: str = '', nav_delay_ms: int = 400, timeout_ms: int = 20000, include_expression_presets: bool = True, include_bank_chunk: bool = True, dry_run: bool = False) -> dict[str, typing.Any]
+```
+
+**Parameters**
+
+| Name | Type | Required | Default |
+| --- | --- | --- | --- |
+| `bank_json` | `str` | yes | `` |
+| `target_bank_number` | `int` | yes | `` |
+| `expect_current_bank_name` | `str` | yes | `` |
+| `anchor_bank_name` | `str` | no | `''` |
+| `anchor_bank_number` | `int` | no | `0` |
+| `output_port` | `str` | no | `''` |
+| `input_port` | `str` | no | `''` |
+| `nav_delay_ms` | `int` | no | `400` |
+| `timeout_ms` | `int` | no | `20000` |
+| `include_expression_presets` | `bool` | no | `True` |
+| `include_bank_chunk` | `bool` | no | `True` |
+| `dry_run` | `bool` | no | `False` |
+
+**Notes**
+
+- Preferred over raw upload_current_bank_from_json - prevents wrong-bank (off-by-one) corruption.
+- expect_current_bank_name is REQUIRED and is the guard; a mismatch raises BankPositionError and writes nothing.
+- anchor_bank_name must be a unique, correct bank name (e.g. the last programmed bank) at anchor_bank_number.
+- dry_run=True rehearses navigation + guard without writing.
+- After a real write the controller locks into editor-session mode: POWER-CYCLE before the next bank or verify. One bank per power-cycle.
+
+**Example**
+
+```python
+safe_flash_bank(bank_json='{"bank_name":"AFX 001-008","presets":[]}', target_bank_number=1, expect_current_bank_name='AFX 009-016', anchor_bank_name='AFX 377-384', anchor_bank_number=48, dry_run=True)
 ```
 
 ## Offline Backup JSON

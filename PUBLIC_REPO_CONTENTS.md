@@ -13,8 +13,10 @@ Top-level files:
 - `pyproject.toml`
 - `requirements.txt`
 - `README.md`
+- `DESIGN.md`
 - `MCP_SHARING_GUIDE.md`
 - `PUBLISHING_CHECKLIST.md`
+- `PUBLIC_REPO_CONTENTS.md`
 - `MC8_MCP_TOOL_REFERENCE.md`
 - `morningstar_mc8_mcp.py`
 
@@ -60,19 +62,10 @@ LICENSE
 pyproject.toml
 requirements.txt
 README.md
+DESIGN.md
 MCP_SHARING_GUIDE.md
 PUBLISHING_CHECKLIST.md
 MC8_MCP_TOOL_REFERENCE.md
 morningstar_mc8_mcp.py
 tools/generate_mc8_mcp_tool_reference.py
 ```
-
-## Export process
-
-Use:
-
-```text
-powershell -ExecutionPolicy Bypass -File tools/export_public_repo.ps1 -DestinationPath <new-folder>
-```
-
-That script copies only the allowlisted files into a clean destination folder so you can initialize a new standalone repository without carrying over private or research-only material.

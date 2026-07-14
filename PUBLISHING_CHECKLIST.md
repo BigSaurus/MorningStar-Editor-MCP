@@ -1,25 +1,24 @@
 # MorningStar Editor MCP Publishing Checklist
 
-Use this checklist when turning the `MC8 Pro` folder into its own public repository.
+Maintainer checklist for cutting a release of this standalone public repository.
 
 ## Repo shape
 
-- Make this folder the repository root.
-- Keep `pyproject.toml`, `morningstar_mc8_mcp.py`, and `README.md` at the top level.
-- Keep `tools/generate_mc8_mcp_tool_reference.py` in the repo so the tool reference can be regenerated and checked.
-- Use `PUBLIC_REPO_CONTENTS.md` as the allowlist for what belongs in the public repo.
-- Use `tools/export_public_repo.ps1` to stage a clean standalone repo instead of copying the whole working folder by hand.
+- `pyproject.toml`, `morningstar_mc8_mcp.py`, and `README.md` stay at the top level.
+- Keep `tools/generate_mc8_mcp_tool_reference.py` in the repo so the tool reference can be regenerated
+  and checked.
+- Use `PUBLIC_REPO_CONTENTS.md` as the allowlist for what belongs in the repo.
 
-## Required before public release
+## Before a release
 
-- Review the included `LICENSE` file and confirm PolyForm Noncommercial 1.0.0 matches your intended sharing model.
-- Replace placeholder GitHub URLs in the docs.
-- Review the README as a public landing page, not just an internal note.
+- Review `LICENSE` and confirm PolyForm Noncommercial 1.0.0 still matches your intended sharing model.
+- Confirm the GitHub URLs in the docs point at this repository.
+- Review the README as a public landing page.
 - Confirm the MCP config examples match the clients you want to support.
 
 ## Validation
 
-Run these commands from the repo root:
+Run these from the repository root:
 
 ```text
 python -m py_compile morningstar_mc8_mcp.py tools/generate_mc8_mcp_tool_reference.py
@@ -29,13 +28,12 @@ python -m pip wheel . --no-deps
 
 ## Release flow
 
-1. Create the standalone GitHub repository.
-2. Run `tools/export_public_repo.ps1 -DestinationPath <new-folder>` to stage only the public files.
-3. Commit the package files, docs, and tool reference.
-4. Push the repo and tag a first release.
-5. Test `pipx install git+https://github.com/BigSaurus/MorningStar-Editor-MCP.git` from a clean environment.
+1. Commit the package files, docs, and regenerated tool reference.
+2. Push to `main`.
+3. Tag a release.
+4. Test `pipx install git+https://github.com/BigSaurus/MorningStar-Editor-MCP.git` from a clean environment.
 
-## Nice-to-have after the first public push
+## Nice-to-have
 
 - Add repository URLs to `pyproject.toml`.
 - Add a changelog.
